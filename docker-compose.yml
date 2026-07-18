@@ -1,0 +1,28 @@
+# Имя проекта задано явно: по умолчанию Compose берёт его из имени папки, а
+# «ТуваФото» после нормализации (только латиница/цифры) даёт пустую строку и
+# команда падает с «project name must not be empty».
+name: tuvafoto
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tuvafoto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tuvafoto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tuvafoto}
+      POSTGRES_DB: ${POSTGRES_DB:-tuvafoto}
+    ports:
+      # Наружу только на localhost: база не должна торчать в сеть.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Без этого api стартует раньше, чем база примет подключения.
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-tuvafoto} -d ${POSTGRES_DB:-tuvafoto}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

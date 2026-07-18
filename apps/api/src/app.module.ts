@@ -1,0 +1,30 @@
+import { Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
+import { ConfigModule } from '@nestjs/config'
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
+import { PrismaModule } from './prisma/prisma.module'
+import { MailModule } from './mail/mail.module'
+import { AuthModule } from './auth/auth.module'
+import { HealthController } from './health/health.controller'
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
+import { RolesGuard } from './auth/guards/roles.guard'
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    // Общий потолок запросов; на чувствительных ручках ужимаем через @Throttle.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
+    PrismaModule,
+    MailModule,
+    AuthModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Закрыто по умолчанию: маршрут открывается явным @Public(). Так забытый
+    // декоратор оборачивается отказом в доступе, а не дырой.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
+})
+export class AppModule {}

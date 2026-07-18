@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>@keyframes bookHint{0%,100%{opacity:.35}50%{opacity:.85}}</style>
+<script src="image-slot.js"></script>
+</helmet>
+<div onClick="{{onWrapClick}}" style="{{wrapStyle}}">
+  <div style="perspective:2800px;width:{{stageW}}px;height:{{ph}}px;display:flex;align-items:center;justify-content:center">
+    <div style="position:relative;width:{{doubleW}}px;height:{{ph}}px;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.35,.05,.2,1);transform:{{stageShift}}">
+
+      <!-- page-thickness edges (imply a real book block) -->
+      <div style="position:absolute;top:2.5%;left:-4px;width:8px;height:95%;transform:translateZ(-2px);border-radius:3px 0 0 3px;background:linear-gradient(90deg,#c7c1b2,#efece4);opacity:{{openEdgeOpacity}};transition:opacity .4s;box-shadow:-2px 0 0 #d7d2c4,-4px 1px 0 #cfc9bb,-6px 2px 0 #c7c1b2"></div>
+      <div style="position:absolute;top:2.5%;right:-4px;width:8px;height:95%;transform:translateZ(-2px);border-radius:0 3px 3px 0;background:linear-gradient(-90deg,#c7c1b2,#efece4);opacity:{{openEdgeOpacity}};transition:opacity .4s;box-shadow:2px 0 0 #d7d2c4,4px 1px 0 #cfc9bb,6px 2px 0 #c7c1b2"></div>
+
+      <!-- closed-book page block (fore-edge volume) -->
+      <div style="position:absolute;top:2.5%;left:{{closedBlockLeft}}px;width:{{pw}}px;height:95%;transform:translateZ(-3px);border-radius:{{closedBlockRadius}};background:{{closedBlockBg}};opacity:{{closedEdgeOpacity}};transition:opacity .4s;box-shadow:{{closedBlockShadow}}"></div>
+
+      <!-- OPEN SPREAD: one full-width photo across both pages -->
+      <div style="position:absolute;top:0;left:0;width:{{doubleW}}px;height:{{ph}}px;opacity:{{spreadOpacity}};transition:opacity .35s;background:#F3F0E9;padding:8px;z-index:1">
+        <div style="position:relative;width:100%;height:100%;overflow:hidden;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)">
+          <x-import component-from-global-scope="image-slot" id="{{spreadPhotoId}}" placeholder="{{spreadLabel}}" shape="rect" fit="cover" hint-size="100%,100%"></x-import>
+          <div style="position:absolute;top:0;bottom:0;left:50%;width:26px;transform:translateX(-13px);background:linear-gradient(90deg,transparent,rgba(0,0,0,.16),rgba(0,0,0,.05) 52%,rgba(0,0,0,.16),transparent);pointer-events:none"></div>
+          <div onClick="{{pageClick}}" style="position:absolute;inset:0;cursor:{{pageCursor}}"></div>
+        </div>
+      </div>
+
+      <!-- TURNING SHEET (cream, transient) -->
+      <div style="position:absolute;top:0;left:{{turn.left}}px;width:{{pw}}px;height:{{ph}}px;transform-origin:{{turn.origin}};transform-style:preserve-3d;transition:{{turn.transition}};transform:{{turn.transform}};z-index:60;pointer-events:none;display:{{turn.display}}">
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:linear-gradient(90deg,#f1eee6,#e6e2d8);border-radius:2px 6px 6px 2px;box-shadow:0 22px 46px rgba(0,0,0,.4)"></div>
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);background:linear-gradient(-90deg,#f1eee6,#e6e2d8);border-radius:6px 2px 2px 6px;box-shadow:0 22px 46px rgba(0,0,0,.4)"></div>
+      </div>
+
+      <!-- FRONT COVER -->
+      <div style="position:absolute;top:0;left:{{pw}}px;width:{{pw}}px;height:{{ph}}px;transform-origin:left center;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.4,.05,.2,1),opacity .4s ease;opacity:{{coverOpacity}};pointer-events:{{coverPe}};transform:{{coverTransform}};z-index:{{coverZ}}">
+        <div onClick="{{toggle}}" style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;border-radius:2px 6px 6px 2px;box-shadow:0 22px 48px rgba(0,0,0,.45);cursor:pointer;background:#141210">
+          <x-import component-from-global-scope="image-slot" id="{{coverId}}" placeholder="Обложка альбома" shape="rect" fit="cover" hint-size="100%,100%"></x-import>
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,9,12,.5) 0%,transparent 32%,transparent 52%,rgba(10,9,12,.88) 100%);pointer-events:none"></div>
+          <div style="position:absolute;top:20px;left:20px;right:20px;display:flex;justify-content:space-between;align-items:center;pointer-events:none">
+            <span style="font:700 11px/1 'Unbounded',sans-serif;letter-spacing:.02em;color:#E4B45C">ТуваФото</span>
+            <span style="width:22px;height:22px;border:1px solid rgba(228,180,92,.6);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#E4B45C">✦</span>
+          </div>
+          <div style="position:absolute;left:22px;right:22px;bottom:20px;pointer-events:none">
+            <div style="font:600 22px/1.1 'Unbounded',sans-serif;color:#F3F2EF">{{title}}</div>
+            <div style="margin-top:6px;font:500 11px/1.4 'Manrope',sans-serif;color:rgba(243,242,239,.72)">{{subtitle}}</div>
+            <div style="margin-top:12px;font:500 9px/1 ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:rgba(228,180,92,.9);animation:bookHint 2.2s ease-in-out infinite">Нажмите, чтобы открыть →</div>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);background:linear-gradient(-90deg,#e3dfd4,#f1eee6);border-radius:6px 2px 2px 6px;box-shadow:0 22px 48px rgba(0,0,0,.4)"></div>
+      </div>
+
+      <!-- BACK COVER -->
+      <div style="position:absolute;top:0;left:0;width:{{pw}}px;height:{{ph}}px;transform-origin:right center;transform-style:preserve-3d;transition:transform .8s cubic-bezier(.4,.05,.2,1),opacity .4s ease;opacity:{{backOpacity}};pointer-events:{{backPe}};transform:{{backTransform}};z-index:{{backZ}}">
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;border-radius:6px 2px 2px 6px;box-shadow:0 22px 48px rgba(0,0,0,.45);background:#141210">
+          <x-import component-from-global-scope="image-slot" id="{{backCoverId}}" placeholder="Задняя обложка" shape="rect" fit="cover" hint-size="100%,100%"></x-import>
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,9,12,.42),rgba(10,9,12,.86));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:24px;text-align:center;pointer-events:none">
+            <span style="font:700 13px/1 'Unbounded',sans-serif;color:#E4B45C">ТуваФото</span>
+            <span style="font:500 10px/1.5 'Manrope',sans-serif;color:rgba(243,242,239,.78)">Спасибо, что выбрали нас.<br>Ваши воспоминания — наша работа.</span>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;transform:rotateY(180deg);background:linear-gradient(90deg,#e3dfd4,#f1eee6);border-radius:2px 6px 6px 2px;box-shadow:0 22px 48px rgba(0,0,0,.4)"></div>
+      </div>
+
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center">
+    <button onClick="{{prev}}" style="width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:#F3F2EF;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="border-color:#E4B45C;color:#E4B45C">‹</button>
+    <span style="min-width:110px;text-align:center;font:600 11px/1 ui-monospace,monospace;letter-spacing:.08em;color:rgba(243,242,239,.55)">{{navLabel}}</span>
+    <button onClick="{{next}}" style="width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:#F3F2EF;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="border-color:#E4B45C;color:#E4B45C">›</button>
+    <button onClick="{{togglePlay}}" style="height:38px;padding:0 16px;border-radius:100px;border:1px solid {{playRing}};background:{{playBg}};color:{{playColor}};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">{{playLabel}}</button>
+    <button onClick="{{toggleFs}}" style="height:38px;padding:0 16px;border-radius:100px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(243,242,239,.8);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="border-color:#E4B45C;color:#E4B45C">{{fsLabel}}</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:300},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Выпускной 2025&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;subtitle&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Премиальная фотокнига&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pw&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:210,&quot;tsType&quot;:&quot;number&quot;},&quot;ph&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:150,&quot;tsType&quot;:&quot;number&quot;},&quot;slotBase&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;book&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pages&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;Array&lt;{slotId?:string,label?:string}&gt;&quot;}}">
+class Component extends DCLogic {
+  state = { flipped: 0, fs: false, playing: false, turn: null };
+  componentDidMount() { this._r = () => { if (this.state.fs) this.forceUpdate(); }; window.addEventListener('resize', this._r); }
+  componentWillUnmount() { window.removeEventListener('resize', this._r); if (this._play) clearInterval(this._play); if (this._turnT) clearTimeout(this._turnT); if (this._rafT) clearTimeout(this._rafT); }
+  photoCount() { return Array.isArray(this.props.pages) ? this.props.pages.length : 6; }
+  // animate a cream sheet turning, then land on target flipped
+  goTo(target, dir) {
+    const n = this.photoCount();
+    target = Math.max(0, Math.min(n + 1, target));
+    if (target === this.state.flipped) return;
+    const pw = this._pw || 210;
+    // set up transient turning sheet, then swap photo underneath mid-turn
+    const fwd = dir === 'fwd';
+    const startTurn = fwd
+      ? { left: pw, origin: 'left center', from: 'rotateY(0deg)', to: 'rotateY(-178deg)' }
+      : { left: 0, origin: 'right center', from: 'rotateY(0deg)', to: 'rotateY(178deg)' };
+    this.setState({ turn: { ...startTurn, deg: startTurn.from, on: true } });
+    // next frame -> animate to end
+    if (this._rafT) clearTimeout(this._rafT);
+    this._rafT = setTimeout(() => this.setState(s => (s.turn ? { turn: { ...s.turn, deg: s.turn.to } } : {})), 30);
+    // swap the spread photo at mid-turn
+    if (this._midT) clearTimeout(this._midT);
+    this._midT = setTimeout(() => this.setState({ flipped: target }), 260);
+    // remove turning sheet after animation
+    if (this._turnT) clearTimeout(this._turnT);
+    this._turnT = setTimeout(() => this.setState({ turn: null }), 640);
+  }
+  startPlay() {
+    if (this._play) clearInterval(this._play);
+    const n = this.photoCount();
+    this._play = setInterval(() => {
+      const f = this.state.flipped;
+      if (f >= n) { this.goTo(0, 'back'); }
+      else { this.goTo(f + 1, 'fwd'); }
+    }, 1700);
+    this.setState({ playing: true });
+  }
+  stopPlay() { if (this._play) { clearInterval(this._play); this._play = null; } if (this.state.playing) this.setState({ playing: false }); }
+  renderVals() {
+    const fs = this.state.fs;
+    let pw = this.props.pw ?? 210;
+    let ph = this.props.ph ?? 150;
+    const ratio = pw / ph;
+    if (fs) {
+      const vw = (typeof window !== 'undefined' ? window.innerWidth : 1200);
+      const vh = (typeof window !== 'undefined' ? window.innerHeight : 800);
+      ph = Math.min(vh * 0.74, (vw * 0.9) / 2 / ratio);
+      pw = ph * ratio;
+    }
+    this._pw = pw;
+    const title = this.props.title ?? 'Выпускной альбом';
+    const subtitle = this.props.subtitle ?? 'Премиальная фотокнига';
+    const base = this.props.slotBase ?? 'book';
+    const photos = Array.isArray(this.props.pages) ? this.props.pages : [
+      { label: 'Разворот 01' }, { label: 'Разворот 02' }, { label: 'Разворот 03' },
+      { label: 'Разворот 04' }, { label: 'Разворот 05' }, { label: 'Разворот 06' }
+    ];
+    const n = photos.length;
+    const pid = (i) => (photos[i] && photos[i].slotId) || (base + '-P' + i);
+    const plabel = (i) => (photos[i] && photos[i].label) || ('Разворот ' + (i + 1));
+    const flipped = Math.max(0, Math.min(n + 1, this.state.flipped));
+    const isOpen = flipped >= 1 && flipped <= n;
+    const closedFront = flipped === 0;
+    const closedBack = flipped === n + 1;
+    const curPhoto = isOpen ? (flipped - 1) : 0;
+    const t = this.state.turn;
+
+    let navLabel = 'Обложка';
+    if (isOpen) navLabel = 'Разворот ' + flipped + ' / ' + n;
+    else if (closedBack) navLabel = 'Конец альбома';
+
+    return {
+      pw, ph, title, subtitle,
+      coverId: base + '-cover', backCoverId: base + '-back',
+      spreadPhotoId: pid(curPhoto),
+      spreadLabel: plabel(curPhoto),
+      doubleW: pw * 2,
+      stageW: pw * 2 + 60,
+      stageShift: 'translateX(' + (closedFront ? -(pw / 2) : (closedBack ? (pw / 2) : 0)) + 'px)',
+      spreadOpacity: isOpen ? 1 : 0,
+      openEdgeOpacity: isOpen ? 1 : 0,
+      closedEdgeOpacity: isOpen ? 0 : 1,
+      closedBlockLeft: closedBack ? 0 : pw,
+      closedBlockRadius: closedBack ? '2px 6px 6px 2px' : '6px 2px 2px 6px',
+      closedBlockBg: closedBack ? 'linear-gradient(90deg,#efece4,#c7c1b2)' : 'linear-gradient(-90deg,#efece4,#c7c1b2)',
+      closedBlockShadow: closedBack
+        ? '3px 0 0 #d7d2c4,5px 1px 0 #cfc9bb,7px 2px 0 #c7c1b2,9px 3px 0 #beb8a8,0 24px 50px rgba(0,0,0,.45)'
+        : '-3px 0 0 #d7d2c4,-5px 1px 0 #cfc9bb,-7px 2px 0 #c7c1b2,-9px 3px 0 #beb8a8,0 24px 50px rgba(0,0,0,.45)',
+      coverTransform: closedFront ? 'rotateY(0deg)' : 'rotateY(-180deg)',
+      coverZ: closedFront ? 80 : 5,
+      coverOpacity: closedFront ? 1 : 0,
+      coverPe: closedFront ? 'auto' : 'none',
+      backTransform: closedBack ? 'rotateY(0deg)' : 'rotateY(180deg)',
+      backZ: closedBack ? 80 : 4,
+      backOpacity: closedBack ? 1 : 0,
+      backPe: closedBack ? 'auto' : 'none',
+      turn: t ? {
+        left: t.left, origin: t.origin, transform: t.deg,
+        transition: t.deg === t.from ? 'none' : 'transform .6s cubic-bezier(.4,.05,.2,1)',
+        display: 'block', from: t.from
+      } : { left: 0, origin: 'left center', transform: 'rotateY(0deg)', transition: 'none', display: 'none', from: '' },
+      navLabel,
+      next: () => { this.stopPlay(); this.goTo(flipped + 1, 'fwd'); },
+      prev: () => { this.stopPlay(); this.goTo(flipped - 1, 'back'); },
+      toggle: () => { this.stopPlay(); this.goTo(flipped === 0 ? 1 : flipped, 'fwd'); },
+      playing: this.state.playing,
+      togglePlay: () => { if (this.state.playing) this.stopPlay(); else this.startPlay(); },
+      playLabel: this.state.playing ? '⏸  Стоп' : '▶  Старт',
+      playRing: this.state.playing ? '#E4B45C' : 'rgba(255,255,255,.14)',
+      playBg: this.state.playing ? 'rgba(228,180,92,.14)' : 'rgba(255,255,255,.04)',
+      playColor: this.state.playing ? '#E4B45C' : 'rgba(243,242,239,.8)',
+      fs,
+      wrapStyle: fs
+        ? 'position:fixed;inset:0;z-index:9999;background:rgba(6,6,8,.95);backdrop-filter:blur(6px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;user-select:none;padding:30px'
+        : 'display:flex;flex-direction:column;align-items:center;gap:18px;user-select:none',
+      fsLabel: fs ? '✕  Закрыть' : '⛶  Во весь экран',
+      toggleFs: () => this.setState(s => ({ fs: !s.fs })),
+      pageClick: fs ? (() => {}) : (() => this.setState({ fs: true })),
+      pageCursor: fs ? 'default' : 'zoom-in',
+      onWrapClick: (e) => { if (fs && e.target === e.currentTarget) this.setState({ fs: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

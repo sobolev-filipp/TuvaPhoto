@@ -1,0 +1,399 @@
+// Схема БД ТуваФото.
+//
+// Деньги: целые РУБЛИ (Int). Все цены в проекте — целые рубли, дробей не
+// возникает даже при предоплате 50% (округляем вверх). В платёжный провайдер
+// уходит value * 100 копеек — конвертация только на границе с ним.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// URL подключения живёт в prisma.config.ts: начиная с Prisma 7 в схеме его
+// задавать нельзя.
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CLIENT
+  OWNER
+}
+
+enum PayType {
+  PREPAY50
+  FULL
+}
+
+enum PayMethod {
+  SBP
+  BANK
+}
+
+enum OrderStatus {
+  PENDING // заказ создан, оплата не подтверждена
+  PAID // провайдер подтвердил оплату
+  CANCELLED
+}
+
+enum ConsentKind {
+  PERSONAL_DATA // 152-ФЗ, обработка ПДн
+  COOKIE_ALL
+  COOKIE_NECESSARY
+  REVIEW_PUBLISH
+}
+
+// ---------------------------------------------------------------- Аккаунты
+
+model User {
+  id    String @id @default(cuid())
+  email String @unique
+
+  // null у тех, кто вошёл через Яндекс/VK: пароля у них нет и быть не должно.
+  passwordHash String?
+  name         String
+  // Хранится в E.164 (+79XXXXXXXXX). null у пришедших через OAuth — провайдер
+  // телефон не отдаёт, а форма регистрации требует его только на своём пути.
+  phone        String?
+  role         Role    @default(CLIENT)
+
+  emailVerifiedAt DateTime?
+  // Владелец заводится сидом с временными доступами; пока флаг стоит, сайт
+  // требует сменить логин и пароль и не пускает в админку.
+  mustChangeCredentials Boolean @default(false)
+  // Сразу после смены доступов владелец обязан заполнить данные о себе
+  // (ФИО, адрес, телефон) — они идут в блок «О фотографе».
+  mustCompleteProfile   Boolean @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  sessions            Session[]
+  oauthAccounts       OAuthAccount[]
+  twoFactorCodes      TwoFactorCode[]
+  passwordResetTokens PasswordResetToken[]
+  orders              Order[]
+  consents            Consent[]
+
+  @@index([role])
+}
+
+model OAuthAccount {
+  id String @id @default(cuid())
+
+  provider          String // yandex | vk
+  providerAccountId String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // Один аккаунт провайдера — один пользователь.
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id String @id @default(cuid())
+
+  // Храним только хэш refresh-токена: утечка БД не должна давать входа.
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userAgent String?
+  ip        String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TwoFactorCode {
+  id String @id @default(cuid())
+
+  // Код из 4 цифр — тоже только хэш, и с ограничением попыток.
+  codeHash String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id String @id @default(cuid())
+
+  // В БД только хэш токена — из письма приходит сам токен.
+  tokenHash String @unique
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------- Каталог
+
+model Image {
+  id String @id @default(cuid())
+
+  // Путь внутри хранилища, без домена: при переезде на S3 меняется только
+  // способ отдачи, а записи в БД остаются валидными.
+  path   String
+  width  Int
+  height Int
+  mime   String
+  size   Int
+
+  createdAt DateTime @default(now())
+
+  albumCovers     Album[]        @relation("AlbumCover")
+  albumBackCovers Album[]        @relation("AlbumBackCover")
+  spreads         Spread[]
+  coverVariants   CoverVariant[]
+  abouts          About[]
+  heroSlides      HeroSlide[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  albums Album[]
+}
+
+model ShootType {
+  id          String @id @default(cuid())
+  label       String
+  description String
+  price       Int // рубли
+
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  albums Album[]
+  orders Order[]
+}
+
+model CoverVariant {
+  id       String @id @default(cuid())
+  label    String
+  priceMod Int // надбавка к итогу, рубли
+
+  imageId String?
+  image   Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+}
+
+model Album {
+  id       String @id @default(cuid())
+  name     String
+  subtitle String
+  desc     String
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  shootTypes ShootType[]
+
+  spreadsCount Int // разворотов в готовом варианте
+  minSpreads   Int
+  maxSpreads   Int
+  perSpread    Int // цена за разворот, рубли
+  price        Int // цена «от», рубли
+  format       String
+
+  coverImageId String?
+  coverImage   Image?  @relation("AlbumCover", fields: [coverImageId], references: [id], onDelete: SetNull)
+
+  backCoverImageId String?
+  backCoverImage   Image?  @relation("AlbumBackCover", fields: [backCoverImageId], references: [id], onDelete: SetNull)
+
+  pages Spread[]
+
+  // Витрина показывает только опубликованные — админка может готовить альбом,
+  // не показывая его клиентам.
+  isPublished Boolean @default(false)
+  isFeatured  Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([isPublished])
+}
+
+// Один разворот = одно фото на две страницы.
+model Spread {
+  id    String @id @default(cuid())
+  label String
+
+  albumId String
+  album   Album  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  imageId String?
+  image   Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  sortOrder Int @default(0)
+
+  @@index([albumId, sortOrder])
+}
+
+model HeroSlide {
+  id    String @id @default(cuid())
+  label String
+
+  imageId String?
+  image   Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+}
+
+// ---------------------------------------------------------------- Заказы
+
+model Order {
+  id String @id @default(cuid())
+
+  // Короткий номер для разговора с клиентом по телефону.
+  number Int @unique @default(autoincrement())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Контакты из формы конструктора.
+  fio    String
+  school String
+  phone  String
+
+  coverVariantId String?
+  coverVariant   CoverVariant? @relation(fields: [coverVariantId], references: [id], onDelete: SetNull)
+
+  shootTypes ShootType[]
+
+  spreadsCount Int
+  perSpread    Int
+
+  // Слепок расчёта на момент заказа: цены в админке меняются, а заказ должен
+  // навсегда помнить, из чего сложилась сумма. Считается на сервере.
+  priceShoots  Int
+  priceSpreads Int
+  priceCover   Int
+  total        Int
+  amountDue    Int // к оплате сейчас: 50% или всё
+
+  payType   PayType
+  payMethod PayMethod?
+  status    OrderStatus @default(PENDING)
+
+  paymentProvider String?
+  paymentId       String?
+  paidAt          DateTime?
+
+  // Счётчик новых заказов в админке переживает перезагрузку страницы только
+  // потому, что «прочитано» хранится здесь, а не в сокете.
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([readAt])
+}
+
+// ---------------------------------------------------------------- Прочее
+
+model Review {
+  id     String @id @default(cuid())
+  name   String
+  role   String
+  rating Int
+  text   String
+
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([isPublished, createdAt])
+}
+
+model About {
+  // Синглтон: строка всегда одна.
+  id String @id @default("about")
+
+  fio     String
+  role    String
+  desc    String
+  phone   String
+  email   String
+  address String
+
+  tg String @default("")
+  vk String @default("")
+
+  photoImageId String?
+  photoImage   Image?  @relation(fields: [photoImageId], references: [id], onDelete: SetNull)
+
+  updatedAt DateTime @updatedAt
+}
+
+// Готовый альбом клиента, доступный по секретной ссылке /share/:token.
+model ShareAlbum {
+  id    String @id @default(cuid())
+  token String @unique
+
+  title    String
+  subtitle String
+
+  // Ссылка обязана протухать: это личные фото детей.
+  expiresAt DateTime
+
+  albumId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+// Доказательство согласия по 152-ФЗ: что именно и какую версию текста принял.
+model Consent {
+  id String @id @default(cuid())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  kind          ConsentKind
+  policyVersion String
+  ip            String?
+  userAgent     String?
+
+  acceptedAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([kind])
+}

@@ -1,0 +1,182 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Дизайн-токены ТуваФото. Значения — из design_handoff_tuvafoto/README.md.
+   Меняем цвет/шрифт здесь, а не по месту использования.
+   ========================================================================== */
+@theme {
+  /* Фон и поверхности */
+  --color-ink: #0b0b0e;
+  --color-surface: #0d0d10;
+  --color-surface-2: #141418;
+  --color-surface-warm: #141210;
+  --color-field: #0f0f13;
+
+  /* Текст */
+  --color-bone: #f3f2ef;
+
+  /* Акцент (золото) */
+  --color-gold: #e4b45c;
+  --color-gold-hover: #f0c877;
+  --color-on-gold: #141210;
+
+  /* Страницы книги (крем) */
+  --color-paper: #f3f0e9;
+  --color-paper-2: #efece4;
+  --color-paper-3: #e3dfd4;
+  --color-edge: #c7c1b2;
+  --color-edge-2: #beb8a8;
+
+  /* Типографика */
+  --font-display: 'Unbounded', system-ui, sans-serif;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+
+  /* Радиусы */
+  --radius-pill: 100px;
+
+  /* Тени */
+  --shadow-book: 0 22px 48px rgb(0 0 0 / 0.4);
+  --shadow-gold: 0 8px 26px rgb(228 180 92 / 0.4);
+
+  /* Раскладка */
+  --container-page: 1240px;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink);
+    color: var(--color-bone);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  a {
+    color: var(--color-gold);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-gold-hover);
+  }
+
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-on-gold);
+  }
+
+  input,
+  textarea,
+  button {
+    font-family: inherit;
+  }
+
+  /* Слайдер конструктора: thumb 20px золотой, трек 4px */
+  input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 0.14);
+    outline: none;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--color-gold);
+    cursor: pointer;
+    box-shadow: 0 0 0 4px rgb(228 180 92 / 0.18);
+  }
+  input[type='range']::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-gold);
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+/* Горизонтальные ряды (табы категорий, пресеты конструктора) */
+.scrollx::-webkit-scrollbar {
+  height: 6px;
+}
+.scrollx::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.15);
+  border-radius: 6px;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes floatPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(228 180 92 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 14px rgb(228 180 92 / 0);
+  }
+}
+@keyframes drawerIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes bookHint {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.5s ease both;
+}
+.animate-drawer-in {
+  animation: drawerIn 0.3s cubic-bezier(0.3, 0.1, 0.2, 1) both;
+}
+.animate-float-pulse {
+  animation: floatPulse 2.4s ease-in-out infinite;
+}
+.animate-book-hint {
+  animation: bookHint 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
