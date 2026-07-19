@@ -75,5 +75,5 @@ export interface About {
   vk: string
 }
 
-export type PayType = 'prepay50' | 'full'
-export type PayMethod = 'sbp' | 'bank'
+export type PayType = 'PREPAY' | 'FULL'
+export type PayMethod = 'SBP' | 'BANK'

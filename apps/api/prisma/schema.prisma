@@ -20,8 +20,8 @@ enum Role {
 }
 
 enum PayType {
-  PREPAY50
-  FULL
+  PREPAY // частичная предоплата: процент (20/30/40/50) или своя сумма (≥20%)
+  FULL // полная оплата сразу
 }
 
 enum PayMethod {
@@ -30,9 +30,11 @@ enum PayMethod {
 }
 
 enum OrderStatus {
-  PENDING // заказ создан, оплата не подтверждена
-  PAID // провайдер подтвердил оплату
-  CANCELLED
+  PENDING // заказ создан, ждём оплату (возможна частичная)
+  PAID // оплачен полностью
+  REFUND_PENDING // отменён владельцем, ждём возврата средств заказчику
+  REFUNDED // деньги возвращены — терминальный статус отменённого заказа
+  CANCELLED // legacy: оставлен в enum ради истории, в новом потоке не используется
 }
 
 enum ConsentKind {
@@ -122,6 +124,10 @@ model TwoFactorCode {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   attempts   Int       @default(0)
+  // Сколько раз код пересылали по этому челленджу — ограничивает спам письмами.
+  resends    Int       @default(0)
+  // Когда код в последний раз отправили — для кулдауна между пересылками.
+  sentAt     DateTime  @default(now())
   expiresAt  DateTime
   consumedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -177,7 +183,13 @@ model Category {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
+  // Можно ли в конструкторе выбирать обложку для этой категории и какие именно.
+  // Обложки привязаны к КАТЕГОРИИ (детсад/школа), а не к виду съёмки.
+  allowCover    Boolean        @default(false)
+  coverVariants CoverVariant[]
+
   albums Album[]
+  orders Order[]
 }
 
 model ShootType {
@@ -205,6 +217,9 @@ model CoverVariant {
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  // Категории, в которых эта обложка доступна для выбора.
+  categories Category[]
 
   orders Order[]
 }
@@ -286,6 +301,10 @@ model Order {
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  // Категория (детсад/школа/…): от неё в конструкторе зависят обложки.
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   // Контакты из формы конструктора.
   fio    String
   school String
@@ -305,10 +324,21 @@ model Order {
   priceSpreads Int
   priceCover   Int
   total        Int
-  amountDue    Int // к оплате сейчас: 50% или всё
+  amountDue    Int // к оплате сейчас: процент от total, своя сумма или всё
 
-  payType   PayType
-  payMethod PayMethod?
+  // Сколько заказчик реально внёс (растёт по мере доплат). Полная оплата — когда
+  // amountPaid >= total, тогда статус переходит в PAID.
+  amountPaid Int @default(0)
+  // Сколько вернуть при отмене (задаёт владелец; по умолчанию = amountPaid).
+  refundAmount Int?
+  // Токен ссылки на доплату /pay/:token. Генерируется по требованию владельца.
+  payToken String? @unique
+
+  payType PayType
+  // Процент предоплаты (20/30/40/50) для пресетов; null — если задана своя сумма
+  // (тогда «сколько сейчас» видно только по amountDue) или при полной оплате.
+  prepayPercent Int?
+  payMethod     PayMethod?
   status    OrderStatus @default(PENDING)
 
   paymentProvider String?

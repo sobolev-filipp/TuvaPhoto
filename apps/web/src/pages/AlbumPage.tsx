@@ -1,11 +1,13 @@
 import { Link, useParams } from 'react-router-dom'
 import { Book } from '@/components/Book'
-import { albumById, categoryById, CONTACT_PHONE_HREF, shootLabels } from '@/domain/demoData'
+import { albumById, categoryById, shootLabels } from '@/domain/demoData'
 import { formatPrice } from '@/domain/pricing'
+import { useAbout } from '@/domain/useAbout'
 
 export function AlbumPage() {
   const { id } = useParams<{ id: string }>()
   const album = id ? albumById(id) : undefined
+  const { data: about } = useAbout()
 
   if (!album) {
     return (
@@ -77,12 +79,14 @@ export function AlbumPage() {
             >
               Добавить в конструктор
             </Link>
-            <a
-              href={CONTACT_PHONE_HREF}
-              className="inline-flex items-center gap-2 rounded-full border border-white/[.16] bg-white/[.06] px-[26px] py-4 text-[15px] font-semibold text-bone hover:text-bone"
-            >
-              ☏ Обсудить
-            </a>
+            {about?.phoneHref && (
+              <a
+                href={about.phoneHref}
+                className="inline-flex items-center gap-2 rounded-full border border-white/[.16] bg-white/[.06] px-[26px] py-4 text-[15px] font-semibold text-bone hover:text-bone"
+              >
+                ☏ Обсудить
+              </a>
+            )}
           </div>
         </div>
       </div>

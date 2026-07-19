@@ -163,8 +163,95 @@ export interface ApiConnection {
   linkedAt: string | null
 }
 
+export type OrderStatus = 'PENDING' | 'PAID' | 'REFUND_PENDING' | 'REFUNDED' | 'CANCELLED'
+
+/** Заказ в админке — состав и суммы, как их отдаёт GET /admin/orders. */
+export interface ApiAdminOrder {
+  id: string
+  number: number
+  fio: string
+  school: string
+  phone: string
+  spreadsCount: number
+  perSpread: number
+  priceShoots: number
+  priceSpreads: number
+  priceCover: number
+  total: number
+  amountDue: number
+  /** Сколько заказчик уже внёс. */
+  amountPaid: number
+  /** Сумма к возврату (после отмены). */
+  refundAmount: number | null
+  /** Токен ссылки на доплату, если сгенерирована. */
+  payToken: string | null
+  payType: 'PREPAY' | 'FULL'
+  /** Процент предоплаты для пресета; null — своя сумма или полная оплата. */
+  prepayPercent: number | null
+  payMethod: 'SBP' | 'BANK' | null
+  status: OrderStatus
+  readAt: string | null
+  createdAt: string
+  category: { name: string } | null
+  coverVariant: { label: string } | null
+  shootTypes: { label: string }[]
+}
+
 /** Куда браузер уходит к провайдеру. Полная навигация, не fetch. */
 export const oauthStartUrl = (provider: string) => `/api/auth/oauth/${provider}/start`
+
+export const adminApi = {
+  orders: () => api<ApiAdminOrder[]>('/admin/orders'),
+
+  unreadCount: () => api<{ count: number }>('/admin/orders/unread-count'),
+
+  markRead: (id: string) => api<{ ok: boolean }>(`/admin/orders/${id}/read`, { method: 'POST' }),
+
+  markAllRead: () => api<{ read: number }>('/admin/orders/read-all', { method: 'POST' }),
+
+  /** Указать внесённую заказчиком сумму (полная → «Оплачен»). */
+  setPaid: (id: string, amountPaid: number) =>
+    api<{ ok: boolean }>(`/admin/orders/${id}/set-paid`, { method: 'POST', body: { amountPaid } }),
+
+  /** Сгенерировать/получить ссылку на доплату. */
+  payLink: (id: string) =>
+    api<{ token: string; path: string }>(`/admin/orders/${id}/pay-link`, { method: 'POST' }),
+
+  /** Отменить заказ → ожидание возврата (с суммой к возврату). */
+  cancel: (id: string, refundAmount: number) =>
+    api<{ ok: boolean }>(`/admin/orders/${id}/cancel`, { method: 'POST', body: { refundAmount } }),
+
+  /** Подтвердить возврат средств → «Деньги возвращены». */
+  refunded: (id: string) =>
+    api<{ ok: boolean }>(`/admin/orders/${id}/refunded`, { method: 'POST' }),
+}
+
+/** Публичная страница доплаты /pay/:token — данные заказа и сама оплата. */
+export interface ApiPayOrder {
+  number: number
+  fio: string
+  school: string
+  phone: string
+  total: number
+  amountPaid: number
+  remaining: number
+  payMethod: 'SBP' | 'BANK' | null
+  status: OrderStatus
+  category: string | null
+  cover: string | null
+  shootTypes: string[]
+}
+
+export const payApi = {
+  get: (token: string) => api<ApiPayOrder>(`/pay/${token}`, { skipRefresh: true }),
+
+  pay: (token: string, amount: number) =>
+    api<{ amountPaid: number; remaining: number; paidInFull: boolean }>(`/pay/${token}`, {
+      method: 'POST',
+      body: { amount },
+      skipRefresh: true,
+    }),
+}
 
 export const authApi = {
   register: (body: {
@@ -183,6 +270,9 @@ export const authApi = {
   verify: (body: { challengeId: string; code: string }) =>
     api<AuthResponse>('/auth/verify', { method: 'POST', body }),
 
+  resendCode: (body: { challengeId: string }) =>
+    api<{ cooldown: number }>('/auth/resend', { method: 'POST', body }),
+
   forgotPassword: (body: { email: string }) =>
     api<{ ok: boolean; message: string }>('/auth/forgot-password', { method: 'POST', body }),
 
@@ -193,6 +283,25 @@ export const authApi = {
     api<{ ok: boolean }>('/auth/change-password', { method: 'POST', body }),
 
   connections: () => api<ApiConnection[]>('/auth/oauth/connections'),
+
+  catalogOptions: () =>
+    api<{
+      shootTypes: { id: string; label: string; description: string; price: number }[]
+      coverVariants: { id: string; label: string; priceMod: number; imageUrl: string | null }[]
+    }>('/catalog/options', { skipRefresh: true }),
+
+  createOrder: (body: {
+    fio: string
+    school: string
+    phone: string
+    coverVariantId?: string | null
+    shootTypeIds: string[]
+    spreads: number
+    payType: 'PREPAY' | 'FULL'
+    prepayPercent?: number
+    prepayAmount?: number
+    payMethod?: 'SBP' | 'BANK'
+  }) => api<{ number: number; total: number; amountDue: number }>('/orders', { method: 'POST', body }),
 
   linkOAuth: (provider: string) =>
     api<{ url: string }>(`/auth/oauth/${provider}/link`, { method: 'POST' }),

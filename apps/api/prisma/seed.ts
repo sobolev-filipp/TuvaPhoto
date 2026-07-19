@@ -101,6 +101,31 @@ async function seedCoverVariants() {
   }
 }
 
+/**
+ * Привязка обложек к категориям (детсад/школа/…). Идемпотентно: каждый раз
+ * переустанавливаем набор через set. Обложки должны быть засеяны раньше.
+ */
+async function seedCategoryCovers() {
+  const covers = await prisma.coverVariant.findMany({ select: { id: true, label: true } })
+  const byLabel = (labels: string[]) =>
+    covers.filter((c) => labels.includes(c.label)).map((c) => ({ id: c.id }))
+
+  const config: { slug: string; allowCover: boolean; labels: string[] }[] = [
+    { slug: 'kindergarten', allowCover: true, labels: ['Классика', 'Лён', 'Бархат'] },
+    { slug: 'primary', allowCover: true, labels: ['Классика', 'Кожа', 'Дерево', 'Тиснение золотом'] },
+    // У старшеклассников обложку не выбирают — проверяем и такой путь.
+    { slug: 'senior', allowCover: false, labels: [] },
+  ]
+
+  for (const c of config) {
+    await prisma.category.update({
+      where: { slug: c.slug },
+      data: { allowCover: c.allowCover, coverVariants: { set: byLabel(c.labels) } },
+    })
+  }
+  console.log('✓ Обложки привязаны к категориям')
+}
+
 async function seedAbout() {
   await prisma.about.upsert({
     where: { id: 'about' },
@@ -123,6 +148,7 @@ async function main() {
   await seedCategories()
   await seedShootTypes()
   await seedCoverVariants()
+  await seedCategoryCovers()
   await seedAbout()
 }
 

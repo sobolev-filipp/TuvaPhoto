@@ -2,14 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Book } from '@/components/Book'
 import { Photo } from '@/components/Photo'
-import {
-  albums,
-  CONTACT_PHONE_HREF,
-  featuredAlbumIds,
-  heroSlides,
-  reviews as demoReviews,
-} from '@/domain/demoData'
+import { albums, featuredAlbumIds, heroSlides, reviews as demoReviews } from '@/domain/demoData'
 import type { Review } from '@/domain/types'
+import { useAbout } from '@/domain/useAbout'
 import { ReviewModal } from '@/components/ReviewModal'
 import { Toast, useToast } from '@/components/Toast'
 
@@ -17,6 +12,7 @@ const HERO_INTERVAL_MS = 4200
 
 function Hero() {
   const [slide, setSlide] = useState(0)
+  const { data: about } = useAbout()
 
   useEffect(() => {
     const t = setInterval(() => setSlide((s) => (s + 1) % heroSlides.length), HERO_INTERVAL_MS)
@@ -67,12 +63,14 @@ function Hero() {
               >
                 Заказать альбом
               </Link>
-              <a
-                href={CONTACT_PHONE_HREF}
-                className="block w-full rounded-full border border-white/[.16] bg-white/[.06] px-[26px] py-4 text-center text-[15px] font-semibold text-bone hover:text-bone sm:w-auto"
-              >
-                Позвонить фотографу
-              </a>
+              {about?.phoneHref && (
+                <a
+                  href={about.phoneHref}
+                  className="block w-full rounded-full border border-white/[.16] bg-white/[.06] px-[26px] py-4 text-center text-[15px] font-semibold text-bone hover:text-bone sm:w-auto"
+                >
+                  Позвонить фотографу
+                </a>
+              )}
             </div>
           </div>
         </div>

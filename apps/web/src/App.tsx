@@ -7,7 +7,10 @@ import { CatalogPage } from './pages/CatalogPage'
 import { AlbumPage } from './pages/AlbumPage'
 import { ContactsPage } from './pages/ContactsPage'
 import { InstallPage } from './pages/InstallPage'
+import { ConstructorPage } from './pages/ConstructorPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { AdminPage } from './pages/AdminPage'
+import { PayPage } from './pages/PayPage'
 import { SecurityPage } from './pages/profile/SecurityPage'
 import { ConnectionsPage } from './pages/profile/ConnectionsPage'
 import { LoginPage } from './pages/auth/LoginPage'
@@ -58,7 +61,8 @@ export default function App() {
         <Route path="album/:id" element={<AlbumPage />} />
         <Route path="contacts" element={<ContactsPage />} />
         <Route path="install" element={<InstallPage />} />
-        <Route path="constructor" element={<Stub title="Конструктор альбома" />} />
+        <Route path="constructor" element={<ConstructorPage />} />
+        <Route path="pay/:token" element={<PayPage />} />
         <Route path="privacy" element={<Stub title="Политика обработки персональных данных" />} />
 
         <Route path="login" element={<LoginPage />} />
@@ -77,7 +81,7 @@ export default function App() {
           <Route path="profile/albums" element={<Stub title="Мои альбомы" />} />
         </Route>
         <Route element={<ProtectedRoute role="OWNER" />}>
-          <Route path="admin" element={<Stub title="Админ-панель" />} />
+          <Route path="admin" element={<AdminPage />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

@@ -5,7 +5,12 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import { PrismaModule } from './prisma/prisma.module'
 import { MailModule } from './mail/mail.module'
 import { AuthModule } from './auth/auth.module'
+import { OrdersModule } from './orders/orders.module'
+import { AdminModule } from './admin/admin.module'
+import { PaymentsModule } from './payments/payments.module'
 import { HealthController } from './health/health.controller'
+import { AboutController } from './about/about.controller'
+import { CatalogController } from './catalog/catalog.controller'
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard'
 import { RolesGuard } from './auth/guards/roles.guard'
 
@@ -17,8 +22,11 @@ import { RolesGuard } from './auth/guards/roles.guard'
     PrismaModule,
     MailModule,
     AuthModule,
+    OrdersModule,
+    AdminModule,
+    PaymentsModule,
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, AboutController, CatalogController],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Закрыто по умолчанию: маршрут открывается явным @Public(). Так забытый

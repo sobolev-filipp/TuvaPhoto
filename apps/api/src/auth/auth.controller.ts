@@ -21,6 +21,7 @@ import {
   ForgotPasswordDto,
   LoginDto,
   RegisterDto,
+  ResendCodeDto,
   ResetPasswordDto,
   VerifyDto,
 } from './dto/auth.dto'
@@ -90,6 +91,15 @@ export class AuthController {
     )
     this.setRefreshCookie(res, refreshToken)
     return { accessToken, user }
+  }
+
+  @Public()
+  @Post('resend')
+  @HttpCode(200)
+  // Каждая пересылка = письмо; жёстко ограничиваем частоту по IP.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async resend(@Body() dto: ResendCodeDto) {
+    return this.auth.resendCode(dto.challengeId)
   }
 
   @Public()

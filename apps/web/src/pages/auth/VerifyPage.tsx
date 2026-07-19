@@ -21,9 +21,21 @@ export function VerifyPage() {
   const [digits, setDigits] = useState<string[]>(Array(LENGTH).fill(''))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  // Секунды до следующей возможной отправки. Код только что прислали при входе,
+  // поэтому стартуем с кулдауна — иначе мгновенный повтор упрётся в 429.
+  const [cooldown, setCooldown] = useState(45)
   const inputs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => inputs.current[0]?.focus(), [])
+
+  // Тикаем кулдаун вниз, пока не 0.
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setInterval(() => setCooldown((s) => (s <= 1 ? 0 : s - 1)), 1000)
+    return () => clearInterval(t)
+  }, [cooldown])
 
   // Сюда попадают только после login/register: без challengeId проверять нечего.
   if (!state?.challengeId) return <Navigate to="/login" replace />
@@ -50,6 +62,27 @@ export function VerifyPage() {
       inputs.current[0]?.focus()
     } finally {
       setBusy(false)
+    }
+  }
+
+  const resend = async () => {
+    if (cooldown > 0 || resending) return
+    setResending(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const { cooldown: next } = await authApi.resendCode({ challengeId: state.challengeId })
+      setCooldown(next)
+      setNotice('Новый код отправлен')
+      setDigits(Array(LENGTH).fill(''))
+      inputs.current[0]?.focus()
+    } catch (err) {
+      // 429 приносит retryAfter — заводим таймер по нему.
+      const data = err instanceof ApiError ? (err.data as { retryAfter?: number } | undefined) : undefined
+      if (data?.retryAfter) setCooldown(data.retryAfter)
+      setError(err instanceof ApiError ? err.message : 'Не удалось отправить код')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -107,8 +140,13 @@ export function VerifyPage() {
         </p>
 
         <FormError message={error} />
+        {notice && (
+          <div className="rounded-xl border border-gold/30 bg-gold/[.08] px-4 py-2.5 text-[13px] text-white/75">
+            {notice}
+          </div>
+        )}
 
-        <div className="flex justify-center gap-3">
+        <div className="flex justify-center gap-2 min-[360px]:gap-3">
           {digits.map((d, i) => (
             <input
               key={i}
@@ -123,7 +161,7 @@ export function VerifyPage() {
               autoComplete={i === 0 ? 'one-time-code' : 'off'}
               aria-label={`Цифра ${i + 1} из ${LENGTH}`}
               disabled={busy}
-              className={`font-display h-[72px] w-[62px] rounded-[14px] border-2 bg-field text-center text-[30px] font-bold text-bone outline-none transition-colors focus:border-gold disabled:opacity-50 ${
+              className={`font-display h-16 w-full max-w-[62px] rounded-[14px] border-2 bg-field text-center text-[26px] font-bold text-bone outline-none transition-colors focus:border-gold disabled:opacity-50 min-[360px]:h-[72px] min-[360px]:text-[30px] ${
                 d ? 'border-gold/60' : 'border-white/[.12]'
               }`}
             />
@@ -136,15 +174,19 @@ export function VerifyPage() {
       </form>
 
       <div className="mt-5 text-center text-[13px] text-white/55">
-        Код не пришёл? Вернитесь к{' '}
-        <button
-          type="button"
-          onClick={() => navigate('/login')}
-          className="cursor-pointer border-none bg-transparent p-0 text-[13px] font-semibold text-gold"
-        >
-          входу
-        </button>{' '}
-        и попробуйте снова.
+        Код не пришёл?{' '}
+        {cooldown > 0 ? (
+          <span className="text-white/40">Отправить повторно через {cooldown} с</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void resend()}
+            disabled={resending}
+            className="cursor-pointer border-none bg-transparent p-0 text-[13px] font-semibold text-gold disabled:opacity-50"
+          >
+            {resending ? 'Отправляем…' : 'Отправить код повторно'}
+          </button>
+        )}
       </div>
     </AuthLayout>
   )

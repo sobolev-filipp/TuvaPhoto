@@ -1,5 +1,8 @@
 import {
+  BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -16,6 +19,10 @@ import type { LoginDto, RegisterDto } from './dto/auth.dto'
 const CODE_TTL_MS = 10 * 60 * 1000
 /** Больше попыток — код сгорает: 4 цифры это всего 10 000 вариантов. */
 const MAX_CODE_ATTEMPTS = 5
+/** Кулдаун между пересылками кода (защита от спама письмами). */
+const RESEND_COOLDOWN_MS = 45 * 1000
+/** Сколько раз можно переслать код по одному челленджу. */
+const MAX_RESENDS = 3
 /** Сколько живёт сессия (refresh-токен). */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 /** Время жизни access-токена. */
@@ -177,6 +184,57 @@ export class AuthService {
 
     const session = await this.issueSession(challenge.user.id, challenge.user.role, meta)
     return { ...session, user: this.toPublicUser(challenge.user) }
+  }
+
+  /**
+   * Повторная отправка кода по существующему челленджу.
+   *
+   * Меры безопасности: генерируем НОВЫЙ код (старый перестаёт действовать),
+   * держим кулдаун между пересылками и ограничиваем их число — иначе форма
+   * превращается в способ засыпать чужой ящик письмами. Ответ про «сколько
+   * ждать» одинаков по форме и не раскрывает, существует ли челлендж (кроме
+   * явных 400/429, которые нужны клиенту для UX).
+   */
+  async resendCode(challengeId: string) {
+    const challenge = await this.prisma.twoFactorCode.findUnique({
+      where: { id: challengeId },
+      include: { user: true },
+    })
+
+    if (!challenge || challenge.consumedAt || challenge.expiresAt < new Date()) {
+      throw new BadRequestException('Сессия входа истекла, войдите заново')
+    }
+
+    if (challenge.resends >= MAX_RESENDS) {
+      throw new BadRequestException('Достигнут предел повторных отправок, войдите заново')
+    }
+
+    const sinceLast = Date.now() - challenge.sentAt.getTime()
+    if (sinceLast < RESEND_COOLDOWN_MS) {
+      const wait = Math.ceil((RESEND_COOLDOWN_MS - sinceLast) / 1000)
+      throw new HttpException(
+        { message: `Подождите ${wait} с перед повторной отправкой`, retryAfter: wait },
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
+
+    const code = String(randomBytes(4).readUInt32BE(0) % 10000).padStart(4, '0')
+
+    await this.prisma.twoFactorCode.update({
+      where: { id: challenge.id },
+      data: {
+        codeHash: this.hash(code),
+        // Новый код живёт свои полные 10 минут; попытки обнуляем.
+        expiresAt: new Date(Date.now() + CODE_TTL_MS),
+        attempts: 0,
+        resends: { increment: 1 },
+        sentAt: new Date(),
+      },
+    })
+
+    await this.mail.sendTwoFactorCode(challenge.user.email, challenge.user.name, code)
+
+    return { cooldown: Math.ceil(RESEND_COOLDOWN_MS / 1000) }
   }
 
   /* --------------------------------------------- профиль фотографа */

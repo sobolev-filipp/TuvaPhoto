@@ -1,12 +1,17 @@
-import { CONTACT_PHONE, CONTACT_PHONE_HREF } from '@/domain/demoData'
+import { useAbout } from '@/domain/useAbout'
 
-/** Плавающая кнопка звонка — правый нижний угол, пульсирует. */
+/** Плавающая кнопка звонка — правый нижний угол, пульсирует. Номер — владельца. */
 export function FloatingCall() {
+  const { data: about } = useAbout()
+
+  // Нет телефона — нет кнопки: показывать нерабочий звонок незачем.
+  if (!about?.phoneHref) return null
+
   return (
     <a
-      href={CONTACT_PHONE_HREF}
-      aria-label={`Позвонить фотографу: ${CONTACT_PHONE}`}
-      title={`Позвонить: ${CONTACT_PHONE}`}
+      href={about.phoneHref}
+      aria-label={`Позвонить фотографу: ${about.phone}`}
+      title={`Позвонить: ${about.phone}`}
       className="animate-float-pulse fixed right-5 bottom-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gold text-on-gold transition-colors hover:bg-gold-hover hover:text-on-gold"
     >
       <svg

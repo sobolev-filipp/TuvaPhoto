@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { LogoMark } from '../Logo'
 import { Photo } from '../Photo'
 
 /** Сплит-экран: слева атмосферное фото, справа форма. На мобильном фото скрыто. */
@@ -27,17 +25,11 @@ export function AuthLayout({ title, children }: { title: string; children: React
         </div>
       </div>
 
-      <div className="flex w-full items-center justify-center border-l border-white/[.06] bg-surface p-5 min-[821px]:w-[520px] min-[821px]:p-10">
+      <div className="flex w-full items-center justify-center border-l border-white/[.06] bg-surface px-4 py-8 sm:px-6 min-[821px]:w-[520px] min-[821px]:p-10">
         <div className="w-full max-w-[360px]">
-          <Link to="/" className="mb-[30px] flex items-center gap-2.5 text-bone hover:text-bone">
-            <span className="flex h-[30px] w-[22px] items-center justify-center text-gold">
-              <LogoMark height={29} />
-            </span>
-            <span className="font-display text-[17px] leading-none font-extrabold">
-              Тува<span className="text-gold">Фото</span>
-            </span>
-          </Link>
-          <h1 className="font-display m-0 mb-[26px] text-[28px] leading-[1.1] font-bold">{title}</h1>
+          <h1 className="font-display m-0 mb-[26px] text-[26px] leading-[1.1] font-bold min-[420px]:text-[28px]">
+            {title}
+          </h1>
           {children}
         </div>
       </div>

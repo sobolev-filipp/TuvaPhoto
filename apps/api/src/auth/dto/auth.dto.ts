@@ -58,6 +58,12 @@ export class VerifyDto {
   code!: string
 }
 
+export class ResendCodeDto {
+  @IsString()
+  @Length(1, 40)
+  challengeId!: string
+}
+
 export class ForgotPasswordDto {
   @IsEmail({}, { message: 'Некорректный email' })
   @MaxLength(160)
