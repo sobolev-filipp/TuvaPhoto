@@ -1,8 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common'
+import { randomBytes } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { calcPrice, DEFAULT_PER_SPREAD, resolvePrepay } from '../common/pricing'
 import { OrdersGateway } from '../realtime/orders.gateway'
 import type { CreateOrderDto } from './dto/create-order.dto'
+
+/** Версия условий/оферты на момент согласия. Меняется при правке документа. */
+const ORDER_TERMS_VERSION = '2026-07-19'
 
 @Injectable()
 export class OrdersService {
@@ -16,7 +20,11 @@ export class OrdersService {
    * клиент присылает только выбор (какие съёмки, обложка, развороты), а суммы
    * берём из справочников — иначе цену можно было бы подделать на клиенте.
    */
-  async create(dto: CreateOrderDto, userId: string | null) {
+  async create(
+    dto: CreateOrderDto,
+    userId: string | null,
+    meta: { ip: string | null; userAgent: string | null } = { ip: null, userAgent: null },
+  ) {
     // Берём только реально существующие активные съёмки; их цены — из БД.
     const shootTypes = await this.prisma.shootType.findMany({
       where: { id: { in: dto.shootTypeIds }, isActive: true },
@@ -79,10 +87,19 @@ export class OrdersService {
       throw new BadRequestException(e instanceof Error ? e.message : 'Неверная предоплата')
     }
 
+    // Оплата замокана (реального провайдера нет): считаем, что заказчик внёс
+    // выбранную сумму прямо при оформлении. Полная оплата → сразу «Оплачен».
+    // Когда подключим настоящий эквайринг — сюда встанет подтверждение платежа.
+    const amountPaid = due
+    const paidInFull = amountPaid >= parts.total
+
     const order = await this.prisma.order.create({
       data: {
         userId,
         categoryId,
+        // Ссылку на доплату генерируем сразу: заказчик видит её в истории и может
+        // доплатить остаток, а владелец — переслать ту же ссылку.
+        payToken: randomBytes(24).toString('base64url'),
         fio: dto.fio,
         school: dto.school,
         phone: dto.phone,
@@ -95,18 +112,69 @@ export class OrdersService {
         priceCover: parts.priceCover,
         total: parts.total,
         amountDue: due,
+        amountPaid,
         payType: dto.payType,
         prepayPercent,
         payMethod: dto.payMethod,
-        // Оплата пока замокана: заказ создаётся со статусом «ожидает оплаты».
-        status: 'PENDING',
+        status: paidInFull ? 'PAID' : 'PENDING',
+        paidAt: paidInFull ? new Date() : null,
       },
       select: { number: true, total: true, amountDue: true },
+    })
+
+    // Фиксируем согласие (152-ФЗ): версия документа, IP, дата — доказательство
+    // акцепта оферты и согласия на обработку ПДн на момент заказа.
+    await this.prisma.consent.create({
+      data: {
+        userId,
+        kind: 'PERSONAL_DATA',
+        policyVersion: ORDER_TERMS_VERSION,
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
     })
 
     // Пуш в комнату admin: бейдж новых заказов обновляется без перезагрузки.
     this.gateway.emitOrderCreated({ number: order.number })
 
     return order
+  }
+
+  /** История заказов конкретного пользователя для личного кабинета. */
+  async listMine(userId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        number: true,
+        status: true,
+        total: true,
+        amountPaid: true,
+        amountDue: true,
+        payType: true,
+        prepayPercent: true,
+        payToken: true,
+        createdAt: true,
+        category: { select: { name: true } },
+        coverVariant: { select: { label: true } },
+        shootTypes: { select: { label: true } },
+      },
+    })
+    return orders.map((o) => ({
+      number: o.number,
+      status: o.status,
+      total: o.total,
+      amountPaid: o.amountPaid,
+      remaining: Math.max(0, o.total - o.amountPaid),
+      amountDue: o.amountDue,
+      payType: o.payType,
+      prepayPercent: o.prepayPercent,
+      // Доплатить можно только пока заказ ждёт оплату.
+      payToken: o.status === 'PENDING' ? o.payToken : null,
+      createdAt: o.createdAt,
+      category: o.category?.name ?? null,
+      cover: o.coverVariant?.label ?? null,
+      shootTypes: o.shootTypes.map((s) => s.label),
+    }))
   }
 }

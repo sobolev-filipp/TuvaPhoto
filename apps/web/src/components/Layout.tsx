@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigationType } from 'react-router-dom'
 import { Nav } from './Nav'
 import { Footer } from './Footer'
 import { CookieBanner } from './CookieBanner'
@@ -7,10 +7,17 @@ import { FloatingCall } from './FloatingCall'
 import { InstallBanner } from '@/pwa/InstallBanner'
 import { UpdatePrompt } from '@/pwa/UpdatePrompt'
 
-/** Сброс прокрутки при смене роута — иначе новая страница открывается в середине. */
+/**
+ * Сброс прокрутки при переходе на новую страницу — иначе она открывается в
+ * середине. Но при навигации «назад/вперёд» (POP) скролл не трогаем: браузер
+ * сам вернёт позицию туда, где пользователь был (например, в каталоге).
+ */
 function ScrollToTop() {
   const { pathname } = useLocation()
-  useEffect(() => window.scrollTo(0, 0), [pathname])
+  const navType = useNavigationType()
+  useEffect(() => {
+    if (navType !== 'POP') window.scrollTo(0, 0)
+  }, [pathname, navType])
   return null
 }
 

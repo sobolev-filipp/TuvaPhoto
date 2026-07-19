@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/Modal'
+import { Toast, useToast } from '@/components/Toast'
 import { adminApi, ApiError, type ApiAdminOrder, type OrderStatus } from '@/lib/api'
 import { connectAdminSocket } from '@/lib/socket'
 import { formatPrice, pluralSpreads } from '@/domain/pricing'
+import { CategoriesTab } from './admin/CategoriesTab'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: 'Ожидает оплаты',
@@ -50,7 +52,33 @@ function Row({ label, value }: { label: string; value: string }) {
 const smallBtn =
   'cursor-pointer rounded-xl border border-white/15 px-4 py-2.5 text-[13px] font-semibold text-bone transition-colors hover:border-gold/50 hover:text-gold disabled:cursor-default disabled:opacity-50'
 
-function OrderCard({ order }: { order: ApiAdminOrder }) {
+/**
+ * Копирование в буфер с запасным путём: Clipboard API может быть недоступен
+ * (не защищённый контекст, отказ в правах) — тогда пробуем старый execCommand.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
+function OrderCard({ order, onCopied }: { order: ApiAdminOrder; onCopied: (msg: string) => void }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
@@ -123,6 +151,11 @@ function OrderCard({ order }: { order: ApiAdminOrder }) {
     }
   }
 
+  const copyPhone = async () => {
+    if (await copyText(order.phone)) onCopied('Телефон скопирован')
+    else onCopied('Не удалось скопировать')
+  }
+
   const refundNum = Number(refundInput)
   const refundValid = Number.isInteger(refundNum) && refundNum >= 0 && refundNum <= order.total
 
@@ -163,7 +196,31 @@ function OrderCard({ order }: { order: ApiAdminOrder }) {
 
       {open && (
         <div className="border-t border-white/[.07] px-4 pt-3 pb-4">
-          <Row label="Телефон" value={order.phone} />
+          {/* Телефон — по клику копируется (удобно набирать/писать клиенту). */}
+          <div className="flex justify-between gap-4 py-1.5 text-sm">
+            <span className="text-white/50">Телефон</span>
+            <button
+              type="button"
+              onClick={copyPhone}
+              title="Нажмите, чтобы скопировать"
+              className="group flex cursor-pointer items-center gap-1.5 text-right font-medium text-bone hover:text-gold"
+            >
+              {order.phone}
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="flex-none text-white/35 group-hover:text-gold"
+                aria-hidden="true"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          </div>
           <Row label="Категория" value={order.category?.name ?? '—'} />
           <Row label="Виды съёмки" value={order.shootTypes.map((s) => s.label).join(', ') || '—'} />
           <Row label="Обложка" value={order.coverVariant?.label ?? '—'} />
@@ -323,6 +380,7 @@ function OrderCard({ order }: { order: ApiAdminOrder }) {
 
 function OrdersTab() {
   const qc = useQueryClient()
+  const { toast, show } = useToast()
 
   const orders = useQuery({ queryKey: ['admin', 'orders'], queryFn: adminApi.orders })
   const unread = useQuery({
@@ -364,14 +422,16 @@ function OrdersTab() {
 
       <div className="flex flex-col gap-3">
         {orders.data?.map((o) => (
-          <OrderCard key={o.id} order={o} />
+          <OrderCard key={o.id} order={o} onCopied={show} />
         ))}
       </div>
+
+      <Toast toast={toast} />
     </div>
   )
 }
 
-type TabKey = 'orders'
+type TabKey = 'orders' | 'categories'
 
 export function AdminPage() {
   const qc = useQueryClient()
@@ -398,6 +458,7 @@ export function AdminPage() {
 
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
     { key: 'orders', label: 'Заказы', badge: unreadCount },
+    { key: 'categories', label: 'Категории' },
   ]
 
   return (
@@ -430,7 +491,10 @@ export function AdminPage() {
           ))}
         </nav>
 
-        <div className="min-w-0 flex-1">{tab === 'orders' && <OrdersTab />}</div>
+        <div className="min-w-0 flex-1">
+          {tab === 'orders' && <OrdersTab />}
+          {tab === 'categories' && <CategoriesTab />}
+        </div>
       </div>
     </div>
   )

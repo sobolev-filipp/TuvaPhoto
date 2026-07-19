@@ -1,9 +1,10 @@
-import { Body, Controller, HttpCode, Post, Req } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import type { Request } from 'express'
 import { OrdersService } from './orders.service'
 import { CreateOrderDto } from './dto/create-order.dto'
 import { Public } from '../auth/decorators/public.decorator'
+import { CurrentUser } from '../auth/decorators/current-user.decorator'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import type { AccessPayload } from '../auth/auth.service'
@@ -27,7 +28,16 @@ export class OrdersController {
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async create(@Body() dto: CreateOrderDto, @Req() req: Request) {
     const userId = await this.softUserId(req)
-    return this.orders.create(dto, userId)
+    return this.orders.create(dto, userId, {
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    })
+  }
+
+  /** История заказов текущего пользователя (для личного кабинета). Требует входа. */
+  @Get('mine')
+  mine(@CurrentUser() user: AccessPayload) {
+    return this.orders.listMine(user.sub)
   }
 
   /** Мягко достаём userId из Bearer, если он есть и валиден; иначе null. */

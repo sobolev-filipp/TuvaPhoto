@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi, setAccessToken } from '@/lib/api'
 import { useAuth } from '@/store/auth'
+import { takePostLoginRedirect } from '@/lib/session-return'
 
 /**
  * Приёмник соцвхода. Бэкенд после провайдера поставил refresh-куку и увёл сюда;
@@ -24,7 +25,8 @@ export function OAuthCallbackPage() {
       .then(({ accessToken, user }) => {
         setAccessToken(accessToken)
         setSession(accessToken, user)
-        navigate('/profile', { replace: true })
+        // Вернём в конструктор, если вход начинали оттуда.
+        navigate(takePostLoginRedirect() ?? '/profile', { replace: true })
       })
       .catch(() => navigate('/login?oauth_error=session', { replace: true }))
   }, [navigate, setSession])

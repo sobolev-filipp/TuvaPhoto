@@ -224,6 +224,62 @@ export const adminApi = {
   /** Подтвердить возврат средств → «Деньги возвращены». */
   refunded: (id: string) =>
     api<{ ok: boolean }>(`/admin/orders/${id}/refunded`, { method: 'POST' }),
+
+  // --- Категории ↔ обложки ---
+  covers: () => api<AdminCover[]>('/admin/covers'),
+  categories: () => api<AdminCategory[]>('/admin/categories'),
+  createCategory: (body: AdminCategoryInput) =>
+    api<{ id: string }>('/admin/categories', { method: 'POST', body }),
+  reorderCategories: (ids: string[]) =>
+    api<{ ok: boolean }>('/admin/categories/reorder', { method: 'POST', body: { ids } }),
+  updateCategory: (id: string, body: Partial<AdminCategoryInput>) =>
+    api<{ ok: boolean }>(`/admin/categories/${id}`, { method: 'PATCH', body }),
+  deleteCategory: (id: string) =>
+    api<{ ok: boolean }>(`/admin/categories/${id}`, { method: 'DELETE' }),
+}
+
+export interface AdminCover {
+  id: string
+  label: string
+  priceMod: number
+}
+
+export interface AdminCategory {
+  id: string
+  name: string
+  slug: string
+  sortOrder: number
+  allowCover: boolean
+  coverVariantIds: string[]
+}
+
+export interface AdminCategoryInput {
+  name: string
+  allowCover: boolean
+  coverVariantIds: string[]
+}
+
+/** Заказ в истории личного кабинета. */
+export interface ApiMyOrder {
+  number: number
+  status: OrderStatus
+  total: number
+  amountPaid: number
+  remaining: number
+  amountDue: number
+  payType: 'PREPAY' | 'FULL'
+  prepayPercent: number | null
+  /** Токен для доплаты; null, если доплата уже не нужна. */
+  payToken: string | null
+  createdAt: string
+  category: string | null
+  cover: string | null
+  shootTypes: string[]
+}
+
+export const ordersApi = {
+  /** История заказов текущего пользователя. */
+  mine: () => api<ApiMyOrder[]>('/orders/mine'),
 }
 
 /** Публичная страница доплаты /pay/:token — данные заказа и сама оплата. */
@@ -288,12 +344,20 @@ export const authApi = {
     api<{
       shootTypes: { id: string; label: string; description: string; price: number }[]
       coverVariants: { id: string; label: string; priceMod: number; imageUrl: string | null }[]
+      categories: {
+        id: string
+        name: string
+        slug: string
+        allowCover: boolean
+        coverVariantIds: string[]
+      }[]
     }>('/catalog/options', { skipRefresh: true }),
 
   createOrder: (body: {
     fio: string
     school: string
     phone: string
+    categoryId?: string | null
     coverVariantId?: string | null
     shootTypeIds: string[]
     spreads: number
@@ -301,6 +365,7 @@ export const authApi = {
     prepayPercent?: number
     prepayAmount?: number
     payMethod?: 'SBP' | 'BANK'
+    consent: boolean
   }) => api<{ number: number; total: number; amountDue: number }>('/orders', { method: 'POST', body }),
 
   linkOAuth: (provider: string) =>

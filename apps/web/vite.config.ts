@@ -66,6 +66,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // host: true — слушаем на всех интерфейсах, чтобы открыть с телефона по
+    // адресу вида http://<IP-компа>:5173 (запросы к /api и сокет идут через прокси).
+    host: true,
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },
       '/uploads': { target: 'http://localhost:3000', changeOrigin: true },

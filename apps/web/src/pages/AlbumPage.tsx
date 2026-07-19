@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Book } from '@/components/Book'
 import { albumById, categoryById, shootLabels } from '@/domain/demoData'
 import { formatPrice } from '@/domain/pricing'
@@ -6,8 +6,16 @@ import { useAbout } from '@/domain/useAbout'
 
 export function AlbumPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const album = id ? albumById(id) : undefined
   const { data: about } = useAbout()
+
+  // Возврат по истории: вернёт в каталог в тот же раздел и на ту же позицию,
+  // откуда пришли. Фолбэк на /catalog — если на альбом зашли по прямой ссылке.
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1)
+    else navigate('/catalog')
+  }
 
   if (!album) {
     return (
@@ -23,12 +31,13 @@ export function AlbumPage() {
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1240px] px-4 pt-10 pb-[100px] md:px-10">
-      <Link
-        to="/catalog"
-        className="mb-9 inline-block text-sm font-semibold text-white/60 hover:text-gold"
+      <button
+        type="button"
+        onClick={goBack}
+        className="mb-9 inline-block cursor-pointer border-none bg-transparent p-0 text-sm font-semibold text-white/60 hover:text-gold"
       >
         ← Назад в каталог
-      </Link>
+      </button>
 
       <div className="flex flex-wrap items-start gap-[70px]">
         <div className="flex flex-[1_1_480px] justify-center pt-5">

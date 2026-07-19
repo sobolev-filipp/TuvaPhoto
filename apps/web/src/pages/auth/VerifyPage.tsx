@@ -4,6 +4,7 @@ import { AuthLayout } from '@/components/auth/AuthLayout'
 import { FormError, submitClass } from '@/components/auth/AuthBits'
 import { ApiError, authApi } from '@/lib/api'
 import { useAuth } from '@/store/auth'
+import { takePostLoginRedirect } from '@/lib/session-return'
 
 const LENGTH = 4
 
@@ -49,12 +50,14 @@ export function VerifyPage() {
     try {
       const { accessToken, user } = await authApi.verify({ challengeId: state.challengeId, code: value })
       setSession(accessToken, user)
+      // Если на вход увели из конструктора — вернём туда (с восстановлением выбора).
+      const redirect = takePostLoginRedirect()
       // Онбординг владельца по шагам: сначала смена доступов, затем данные о себе.
       const to = user.mustChangeCredentials
         ? '/finish-setup'
         : user.mustCompleteProfile
           ? '/finish-profile'
-          : '/profile'
+          : (redirect ?? '/profile')
       navigate(to, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Не удалось подтвердить код')

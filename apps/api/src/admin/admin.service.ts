@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomBytes } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { OrdersGateway } from '../realtime/orders.gateway'
+import { slugify } from '../common/slug'
+import type { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto'
 
 /** Заказ в том виде, в каком его показывает админка. */
 const orderSelect = {
@@ -141,6 +143,129 @@ export class AdminService {
     await this.prisma.order.update({ where: { id }, data: { status: 'REFUNDED' } })
     this.gateway.emitOrderUpdated({ number: order.number })
     return { ok: true }
+  }
+
+  // ------------------------------------------------------------- Категории
+
+  /** Все обложки — для выбора в редакторе категории. */
+  listCovers() {
+    return this.prisma.coverVariant.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, label: true, priceMod: true },
+    })
+  }
+
+  /** Категории с их разрешёнными обложками. */
+  async listCategories() {
+    const cats = await this.prisma.category.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sortOrder: true,
+        allowCover: true,
+        coverVariants: { select: { id: true } },
+      },
+    })
+    return cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      sortOrder: c.sortOrder,
+      allowCover: c.allowCover,
+      coverVariantIds: c.coverVariants.map((cv) => cv.id),
+    }))
+  }
+
+  async createCategory(dto: CreateCategoryDto) {
+    const slug = await this.uniqueSlug(dto.name)
+    // Обложки привязываем только если разрешён их выбор.
+    const coverIds = dto.allowCover ? await this.validCoverIds(dto.coverVariantIds) : []
+    // Новая категория встаёт в конец списка (порядком управляют перетаскиванием).
+    const last = await this.prisma.category.aggregate({ _max: { sortOrder: true } })
+    const sortOrder = dto.sortOrder ?? (last._max.sortOrder ?? -1) + 1
+    const created = await this.prisma.category.create({
+      data: {
+        name: dto.name.trim(),
+        slug,
+        sortOrder,
+        allowCover: dto.allowCover,
+        coverVariants: { connect: coverIds.map((id) => ({ id })) },
+      },
+      select: { id: true },
+    })
+    return { id: created.id }
+  }
+
+  /** Порядок категорий = порядок id в списке. Управляется перетаскиванием в админке. */
+  async reorderCategories(ids: string[]) {
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.category.update({ where: { id }, data: { sortOrder: i } })),
+    )
+    return { ok: true }
+  }
+
+  async updateCategory(id: string, dto: UpdateCategoryDto) {
+    const category = await this.prisma.category.findUnique({ where: { id }, select: { id: true } })
+    if (!category) throw new NotFoundException('Категория не найдена')
+
+    const allowCover = dto.allowCover
+    // Если обложки заданы — переустанавливаем набор (пустой, если выбор запрещён).
+    let coversUpdate: { set: { id: string }[] } | undefined
+    if (dto.coverVariantIds || dto.allowCover === false) {
+      const ids =
+        allowCover === false ? [] : await this.validCoverIds(dto.coverVariantIds ?? [])
+      coversUpdate = { set: ids.map((cid) => ({ id: cid })) }
+    }
+
+    await this.prisma.category.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.allowCover !== undefined ? { allowCover: dto.allowCover } : {}),
+        ...(coversUpdate ? { coverVariants: coversUpdate } : {}),
+      },
+    })
+    return { ok: true }
+  }
+
+  async deleteCategory(id: string) {
+    const withAlbums = await this.prisma.category.findUnique({
+      where: { id },
+      select: { id: true, _count: { select: { albums: true } } },
+    })
+    if (!withAlbums) throw new NotFoundException('Категория не найдена')
+    if (withAlbums._count.albums > 0) {
+      throw new BadRequestException('Нельзя удалить категорию, в которой есть альбомы')
+    }
+    // Заказы ссылаются на категорию через SetNull — они не мешают удалению.
+    await this.prisma.category.delete({ where: { id } })
+    return { ok: true }
+  }
+
+  /** Оставляет только реально существующие активные обложки из переданного списка. */
+  private async validCoverIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const found = await this.prisma.coverVariant.findMany({
+      where: { id: { in: ids }, isActive: true },
+      select: { id: true },
+    })
+    return found.map((c) => c.id)
+  }
+
+  /** Уникальный slug из названия: при коллизии добавляем -2, -3, … */
+  private async uniqueSlug(name: string): Promise<string> {
+    const base = slugify(name) || `cat-${randomBytes(3).toString('hex')}`
+    let slug = base
+    let n = 1
+    while (await this.prisma.category.findUnique({ where: { slug }, select: { id: true } })) {
+      n += 1
+      slug = `${base}-${n}`
+    }
+    return slug
   }
 
   private async requireOrder(id: string) {

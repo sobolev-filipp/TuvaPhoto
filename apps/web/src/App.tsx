@@ -11,8 +11,10 @@ import { ConstructorPage } from './pages/ConstructorPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { AdminPage } from './pages/AdminPage'
 import { PayPage } from './pages/PayPage'
+import { TermsPage } from './pages/TermsPage'
 import { SecurityPage } from './pages/profile/SecurityPage'
 import { ConnectionsPage } from './pages/profile/ConnectionsPage'
+import { OrdersPage } from './pages/profile/OrdersPage'
 import { LoginPage } from './pages/auth/LoginPage'
 import { RegisterPage } from './pages/auth/RegisterPage'
 import { VerifyPage } from './pages/auth/VerifyPage'
@@ -63,6 +65,7 @@ export default function App() {
         <Route path="install" element={<InstallPage />} />
         <Route path="constructor" element={<ConstructorPage />} />
         <Route path="pay/:token" element={<PayPage />} />
+        <Route path="terms" element={<TermsPage />} />
         <Route path="privacy" element={<Stub title="Политика обработки персональных данных" />} />
 
         <Route path="login" element={<LoginPage />} />
@@ -78,6 +81,7 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="profile/security" element={<SecurityPage />} />
           <Route path="profile/connections" element={<ConnectionsPage />} />
+          <Route path="profile/orders" element={<OrdersPage />} />
           <Route path="profile/albums" element={<Stub title="Мои альбомы" />} />
         </Route>
         <Route element={<ProtectedRoute role="OWNER" />}>

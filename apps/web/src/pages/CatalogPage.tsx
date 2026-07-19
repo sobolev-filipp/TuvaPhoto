@@ -1,6 +1,8 @@
 import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Photo } from '@/components/Photo'
-import { albums, categories, categoryById, shootLabels } from '@/domain/demoData'
+import { albums, categories as demoCategories, categoryById, shootLabels } from '@/domain/demoData'
+import { authApi } from '@/lib/api'
 import { formatPrice } from '@/domain/pricing'
 
 export function CatalogPage() {
@@ -8,9 +10,23 @@ export function CatalogPage() {
   const [params, setParams] = useSearchParams()
   const active = params.get('cat') ?? 'all'
 
+  // Порядок и названия категорий берём из админки (БД). Альбомы пока демо —
+  // сопоставляем категорию БД с демо по slug, чтобы порядок из админки управлял
+  // каталогом. Когда витрину переведём на БД, фильтр останется тем же.
+  const { data: options } = useQuery({
+    queryKey: ['catalog-options'],
+    queryFn: authApi.catalogOptions,
+  })
+  const orderedCategories = options?.categories
+    ? options.categories.flatMap((db) => {
+        const demo = demoCategories.find((d) => d.slug === db.slug)
+        return demo ? [{ id: demo.id, name: db.name }] : []
+      })
+    : demoCategories
+
   const shown = active === 'all' ? albums : albums.filter((a) => a.categoryId === active)
 
-  const tabs = [{ id: 'all', name: 'Все альбомы' }, ...categories]
+  const tabs = [{ id: 'all', name: 'Все альбомы' }, ...orderedCategories]
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1240px] px-4 pt-[70px] pb-[100px] md:px-10">

@@ -2,6 +2,7 @@ import { Transform, Type } from 'class-transformer'
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
+  Equals,
   IsArray,
   IsIn,
   IsInt,
@@ -72,4 +73,8 @@ export class CreateOrderDto {
   @IsOptional()
   @IsIn(['SBP', 'BANK'])
   payMethod?: 'SBP' | 'BANK'
+
+  // Согласие с условиями договора-оферты и обработкой ПДн — обязательно.
+  @Equals(true, { message: 'Необходимо согласие с условиями договора' })
+  consent!: boolean
 }

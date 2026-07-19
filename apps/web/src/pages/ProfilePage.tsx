@@ -64,6 +64,7 @@ export function ProfilePage() {
 
       {/* Разделы — заходят по клику, а не показаны инлайн */}
       <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+        <SectionLink to="/profile/orders" title="Мои заказы" desc="История заказов, статусы и доплата" />
         <SectionLink to="/profile/security" title="Безопасность" desc="Смена пароля и активные сессии" />
         <SectionLink
           to="/profile/connections"

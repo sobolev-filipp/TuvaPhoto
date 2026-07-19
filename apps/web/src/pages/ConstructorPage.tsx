@@ -1,5 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import {
+  albumById,
+  categories as demoCategories,
+  shootTypes as demoShootTypes,
+} from '@/domain/demoData'
+import { useAuth } from '@/store/auth'
+import {
+  saveConstructorDraft,
+  setPostLoginRedirect,
+  takeConstructorDraft,
+} from '@/lib/session-return'
 import { Book } from '@/components/Book'
 import { Photo } from '@/components/Photo'
 import { Modal } from '@/components/Modal'
@@ -35,11 +47,15 @@ type PayMethod = 'SBP' | 'BANK'
 
 export function ConstructorPage() {
   const { toast, show } = useToast()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const user = useAuth((s) => s.user)
   const { data: options, isLoading } = useQuery({
     queryKey: ['catalog-options'],
     queryFn: authApi.catalogOptions,
   })
 
+  const [category, setCategory] = useState<string | null>(null)
   const [cover, setCover] = useState<string | null>(null)
   const [shoots, setShoots] = useState<string[]>([])
   const [spreads, setSpreads] = useState(20)
@@ -56,12 +72,78 @@ export function ConstructorPage() {
   const [payMethod, setPayMethod] = useState<PayMethod>('SBP')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Согласие с условиями договора — обязательно перед оформлением.
+  const [agreed, setAgreed] = useState(false)
+
+  const draftRestored = useRef(false)
+  const albumPrefilled = useRef(false)
+
+  // Вернулись со входа — восстанавливаем ранее выбранные параметры (один раз).
+  useEffect(() => {
+    const draft = takeConstructorDraft()
+    if (!draft) return
+    draftRestored.current = true
+    setCategory(draft.category)
+    setCover(draft.cover)
+    setShoots(draft.shoots)
+    setSpreads(draft.spreads)
+    setPrepayKind(draft.prepayKind)
+    setPrepayPercent(draft.prepayPercent)
+    setCustomAmount(draft.customAmount)
+    setFio(draft.fio)
+    setSchool(draft.school)
+    setPhone(draft.phone)
+    setAgreed(draft.agreed)
+  }, [])
+
+  // Пришли из каталога с ?album=<id> — подставляем параметры этого альбома.
+  // Демо-альбом сопоставляем с опциями из БД по slug/label (id'ы у них разные).
+  const albumParam = params.get('album')
+  useEffect(() => {
+    if (draftRestored.current || albumPrefilled.current) return
+    if (!albumParam || !options) return
+    const album = albumById(albumParam)
+    if (!album) return
+    albumPrefilled.current = true
+
+    const demoCat = demoCategories.find((c) => c.id === album.categoryId)
+    const dbCat = demoCat ? options.categories.find((c) => c.slug === demoCat.slug) : undefined
+    if (dbCat) setCategory(dbCat.id)
+
+    const labels = album.shootTypeIds
+      .map((id) => demoShootTypes.find((s) => s.id === id)?.label)
+      .filter((l): l is string => !!l)
+    setShoots(options.shootTypes.filter((s) => labels.includes(s.label)).map((s) => s.id))
+    setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, album.spreads)))
+  }, [albumParam, options])
 
   const shootTypes = options?.shootTypes ?? []
   const coverVariants = options?.coverVariants ?? []
+  const categories = options?.categories ?? []
+
+  const selectedCategory = categories.find((c) => c.id === category) ?? null
+  // Обложки зависят от категории: показываем только разрешённые ею и только
+  // если категория вообще позволяет выбор обложки.
+  const coverAllowed = selectedCategory?.allowCover ?? false
+  const availableCovers = selectedCategory
+    ? coverVariants.filter((c) => selectedCategory.coverVariantIds.includes(c.id))
+    : []
 
   const selectedShoots = shootTypes.filter((s) => shoots.includes(s.id))
-  const selectedCover = coverVariants.find((c) => c.id === cover) ?? null
+  // Обложку учитываем в цене только когда она реально доступна в выбранной категории.
+  const selectedCover =
+    coverAllowed && cover ? (availableCovers.find((c) => c.id === cover) ?? null) : null
+
+  // Смена категории: сбрасываем обложку, если она больше не разрешена.
+  const chooseCategory = (id: string) => {
+    setApplied(null)
+    setCategory((prev) => {
+      const next = prev === id ? null : id
+      const cat = categories.find((c) => c.id === next)
+      if (!cat || !cat.allowCover || !cat.coverVariantIds.includes(cover ?? '')) setCover(null)
+      return next
+    })
+  }
 
   const price = useMemo(() => {
     const priceShoots = selectedShoots.reduce((a, s) => a + s.price, 0)
@@ -86,8 +168,9 @@ export function ConstructorPage() {
 
   const applyPreset = (preset: (typeof PRESETS)[number]) => {
     setShoots(shootTypes.filter((s) => preset.shootLabels.includes(s.label)).map((s) => s.id))
+    // Обложку из пресета ставим, только если она разрешена выбранной категорией.
     const c = coverVariants.find((cv) => cv.label === preset.coverLabel)
-    setCover(c?.id ?? null)
+    setCover(coverAllowed && c && availableCovers.some((av) => av.id === c.id) ? c.id : null)
     setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, preset.spreads)))
     setApplied(preset.id)
   }
@@ -98,11 +181,37 @@ export function ConstructorPage() {
   }
 
   const canSubmit =
+    category !== null &&
     shoots.length > 0 &&
     customValid &&
+    agreed &&
     fio.trim().length >= 2 &&
     school.trim().length >= 2 &&
     isPhoneComplete(phone)
+
+  // Оформить может только вошедший: иначе сохраняем выбор и уводим на вход,
+  // а после входа вернёмся сюда и восстановим параметры.
+  const startPayment = () => {
+    if (!user) {
+      saveConstructorDraft({
+        category,
+        cover,
+        shoots,
+        spreads,
+        prepayKind,
+        prepayPercent,
+        customAmount,
+        fio,
+        school,
+        phone,
+        agreed,
+      })
+      setPostLoginRedirect('/constructor')
+      navigate('/login')
+      return
+    }
+    setPayOpen(true)
+  }
 
   const submitOrder = async () => {
     setSubmitting(true)
@@ -112,13 +221,15 @@ export function ConstructorPage() {
         fio: fio.trim(),
         school: school.trim(),
         phone: `+7${phone}`,
-        coverVariantId: cover,
+        categoryId: category,
+        coverVariantId: selectedCover?.id ?? null,
         shootTypeIds: shoots,
         spreads,
         payType: prepayKind === 'full' ? 'FULL' : 'PREPAY',
         ...(prepayKind === 'percent' ? { prepayPercent } : {}),
         ...(prepayKind === 'custom' ? { prepayAmount: customNum } : {}),
         payMethod,
+        consent: agreed,
       })
       setPayOpen(false)
       show(`Заказ №${res.number} оформлен! Мы свяжемся с вами.`)
@@ -184,38 +295,70 @@ export function ConstructorPage() {
               </div>
             </section>
 
-            {/* Обложка */}
+            {/* Категория */}
             <section className="mb-10">
-              <div className="mb-4 text-[15px] font-bold">1 · Обложка</div>
-              <div className="grid grid-cols-2 gap-3 min-[420px]:grid-cols-3 sm:gap-3.5">
-                {coverVariants.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setApplied(null)
-                      setCover((prev) => (prev === c.id ? null : c.id))
-                    }}
-                    className="overflow-hidden rounded-2xl border-2 text-left transition-colors"
-                    style={{ borderColor: cover === c.id ? '#E4B45C' : 'rgba(255,255,255,.1)' }}
-                  >
-                    <div className="relative h-[110px]">
-                      <Photo src={c.imageUrl} alt={c.label} placeholder={c.label} />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 bg-surface-2 px-3 py-2.5">
-                      <span className="truncate text-[13px] font-semibold">{c.label}</span>
-                      <span className="flex-none text-[12px] text-white/50">
-                        {c.priceMod > 0 ? `+${formatPrice(c.priceMod)}` : '—'}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+              <div className="mb-1.5 text-[15px] font-bold">1 · Категория</div>
+              <div className="mb-4 text-[13px] text-white/50">
+                Ступень, для которой собираем альбом — от неё зависят доступные обложки.
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {categories.map((c) => {
+                  const on = category === c.id
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => chooseCategory(c.id)}
+                      className="cursor-pointer rounded-full border-2 px-5 py-2.5 text-[14px] font-semibold transition-colors"
+                      style={{
+                        borderColor: on ? '#E4B45C' : 'rgba(255,255,255,.12)',
+                        background: on ? 'rgba(228,180,92,.1)' : 'transparent',
+                        color: on ? '#E4B45C' : undefined,
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
+            {/* Обложка — только если категория выбрана и разрешает выбор обложки */}
+            {coverAllowed && availableCovers.length > 0 && (
+              <section className="mb-10">
+                <div className="mb-4 text-[15px] font-bold">2 · Обложка</div>
+                <div className="grid grid-cols-2 gap-3 min-[420px]:grid-cols-3 sm:gap-3.5">
+                  {availableCovers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setApplied(null)
+                        setCover((prev) => (prev === c.id ? null : c.id))
+                      }}
+                      className="overflow-hidden rounded-2xl border-2 text-left transition-colors"
+                      style={{ borderColor: cover === c.id ? '#E4B45C' : 'rgba(255,255,255,.1)' }}
+                    >
+                      <div className="relative h-[110px]">
+                        <Photo src={c.imageUrl} alt={c.label} placeholder={c.label} />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 bg-surface-2 px-3 py-2.5">
+                        <span className="truncate text-[13px] font-semibold">{c.label}</span>
+                        <span className="flex-none text-[12px] text-white/50">
+                          {c.priceMod > 0 ? `+${formatPrice(c.priceMod)}` : '—'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Вид фотосессии */}
             <section className="mb-10">
-              <div className="mb-1.5 text-[15px] font-bold">2 · Вид фотосессии</div>
+              <div className="mb-1.5 text-[15px] font-bold">
+                {coverAllowed ? '3' : '2'} · Вид фотосессии
+              </div>
               <div className="mb-4 text-[13px] text-white/50">
                 Можно выбрать несколько — стоимость суммируется.
               </div>
@@ -256,7 +399,9 @@ export function ConstructorPage() {
             {/* Развороты */}
             <section>
               <div className="mb-4 flex items-baseline justify-between">
-                <span className="text-[15px] font-bold">3 · Количество разворотов</span>
+                <span className="text-[15px] font-bold">
+                  {coverAllowed ? '4' : '3'} · Количество разворотов
+                </span>
                 <span className="font-display text-[22px] leading-none font-bold text-gold">{spreads}</span>
               </div>
               <input
@@ -285,6 +430,10 @@ export function ConstructorPage() {
               <div className="font-display mb-5 text-[20px] leading-none font-bold">Ваш альбом</div>
 
               <div className="flex flex-col gap-3 border-b border-white/[.09] pb-5">
+                <div className="flex justify-between gap-3 text-sm">
+                  <span className="min-w-0 break-words text-white/55">Категория</span>
+                  <span className="flex-none font-semibold">{selectedCategory?.name ?? '—'}</span>
+                </div>
                 <Row
                   label={`Съёмка · ${selectedShoots.length ? selectedShoots.map((s) => s.label).join(', ') : '—'}`}
                   value={formatPrice(price.priceShoots)}
@@ -293,10 +442,12 @@ export function ConstructorPage() {
                   label={`Развороты · ${pluralSpreads(spreads)}`}
                   value={formatPrice(price.priceSpreads)}
                 />
-                <Row
-                  label={`Обложка · ${selectedCover?.label ?? '—'}`}
-                  value={formatPrice(price.priceCover)}
-                />
+                {coverAllowed && (
+                  <Row
+                    label={`Обложка · ${selectedCover?.label ?? '—'}`}
+                    value={formatPrice(price.priceCover)}
+                  />
+                )}
               </div>
 
               <div className="flex items-baseline justify-between py-5">
@@ -395,17 +546,48 @@ export function ConstructorPage() {
                 <PhoneField value={phone} onChange={setPhone} required />
               </div>
 
+              {/* Обязательное согласие с условиями договора-оферты перед оформлением. */}
+              <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-[12px] leading-[1.5] text-white/60">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 flex-none cursor-pointer accent-[#E4B45C]"
+                />
+                <span>
+                  Я принимаю{' '}
+                  <Link to="/terms" target="_blank" className="text-gold">
+                    условия договора-оферты
+                  </Link>{' '}
+                  и даю согласие на обработку персональных данных согласно{' '}
+                  <Link to="/privacy" target="_blank" className="text-gold">
+                    Политике
+                  </Link>{' '}
+                  и ФЗ-152.
+                </span>
+              </label>
+
               <button
                 type="button"
-                onClick={() => setPayOpen(true)}
+                onClick={startPayment}
                 disabled={!canSubmit}
-                className="mt-5 w-full rounded-full bg-gold px-6 py-3.5 text-[15px] font-bold text-on-gold transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
+                className="mt-4 w-full rounded-full bg-gold px-6 py-3.5 text-[15px] font-bold text-on-gold transition-colors hover:bg-gold-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Оплатить {formatPrice(due)}
+                {user ? `Оплатить ${formatPrice(due)}` : 'Войти и оформить заказ'}
               </button>
-              {shoots.length === 0 && (
+              {canSubmit && !user && (
                 <div className="mt-2 text-center text-[12px] text-white/40">
-                  Выберите хотя бы один вид съёмки
+                  Оформление заказа доступно после входа — выбранные параметры сохранятся
+                </div>
+              )}
+              {(category === null || shoots.length === 0) && (
+                <div className="mt-2 text-center text-[12px] text-white/40">
+                  {category === null ? 'Выберите категорию' : 'Выберите хотя бы один вид съёмки'}
+                </div>
+              )}
+              {category !== null && shoots.length > 0 && customValid && !agreed && (
+                <div className="mt-2 text-center text-[12px] text-white/40">
+                  Отметьте согласие с условиями договора
                 </div>
               )}
             </div>
