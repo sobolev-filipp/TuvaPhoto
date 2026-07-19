@@ -241,9 +241,10 @@ export class AuthService {
 
   /**
    * Заполнение данных о фотографе при первом входе владельца. Пишет ФИО, адрес
-   * и телефон в синглтон About (блок «О фотографе» на сайте) и снимает флаг
-   * mustCompleteProfile. Остальные поля About (роль, описание, соцсети) владелец
-   * заполнит позже в админке.
+   * и телефон в синглтон About (блок «О фотографе» на сайте), обновляет имя и
+   * телефон самого аккаунта (иначе в профиле осталось бы заводское имя из сида)
+   * и снимает флаг mustCompleteProfile. Остальные поля About (роль, описание,
+   * соцсети) владелец заполнит позже в админке.
    */
   async completeProfile(userId: string, data: { fio: string; address: string; phone: string }) {
     await this.prisma.about.upsert({
@@ -262,7 +263,8 @@ export class AuthService {
 
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { mustCompleteProfile: false },
+      // Имя и телефон аккаунта = то, что ввёл владелец (а не заводское из сида).
+      data: { name: data.fio, phone: data.phone, mustCompleteProfile: false },
     })
 
     return this.toPublicUser(user)

@@ -44,6 +44,16 @@ enum ConsentKind {
   REVIEW_PUBLISH
 }
 
+enum AlbumOrientation {
+  LANDSCAPE // альбомная (горизонтальная)
+  PORTRAIT // книжная (вертикальная)
+}
+
+enum SpreadLayout {
+  SINGLE // одно фото на весь разворот
+  DOUBLE // два фото, по одному на страницу
+}
+
 // ---------------------------------------------------------------- Аккаунты
 
 model User {
@@ -170,7 +180,8 @@ model Image {
 
   albumCovers     Album[]        @relation("AlbumCover")
   albumBackCovers Album[]        @relation("AlbumBackCover")
-  spreads         Spread[]
+  spreads         Spread[]       @relation("SpreadImage")
+  spreadsRight    Spread[]       @relation("SpreadRight")
   coverVariants   CoverVariant[]
   abouts          About[]
   heroSlides      HeroSlide[]
@@ -242,6 +253,9 @@ model Album {
   price        Int // цена «от», рубли
   format       String
 
+  // Ориентация книги: альбомная (горизонтальная) или книжная (вертикальная).
+  orientation AlbumOrientation @default(LANDSCAPE)
+
   coverImageId String?
   coverImage   Image?  @relation("AlbumCover", fields: [coverImageId], references: [id], onDelete: SetNull)
 
@@ -263,7 +277,8 @@ model Album {
   @@index([isPublished])
 }
 
-// Один разворот = одно фото на две страницы.
+// Разворот: SINGLE — одно фото на две страницы; DOUBLE — два фото (image слева,
+// rightImage справа).
 model Spread {
   id    String @id @default(cuid())
   label String
@@ -271,8 +286,14 @@ model Spread {
   albumId String
   album   Album  @relation(fields: [albumId], references: [id], onDelete: Cascade)
 
+  layout SpreadLayout @default(SINGLE)
+
   imageId String?
-  image   Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  image   Image?  @relation("SpreadImage", fields: [imageId], references: [id], onDelete: SetNull)
+
+  // Второе фото — только для DOUBLE (правая страница).
+  rightImageId String?
+  rightImage   Image?  @relation("SpreadRight", fields: [rightImageId], references: [id], onDelete: SetNull)
 
   sortOrder Int @default(0)
 
