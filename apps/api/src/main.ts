@@ -4,12 +4,17 @@ import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import cookieParser from 'cookie-parser'
 import { AppModule } from './app.module'
+import { storageDir } from './common/storage'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
 
   app.setGlobalPrefix('api')
   app.use(cookieParser())
+
+  // Загруженные фото раздаём как статику под /uploads (глобальный префикс api
+  // сюда не применяется). vite и прод-прокси проксируют /uploads на этот сервер.
+  app.useStaticAssets(storageDir(), { prefix: '/uploads' })
 
   // Клиент за прокси (Caddy/nginx): без этого req.ip покажет адрес прокси,
   // и в сессиях у всех будет один и тот же IP.

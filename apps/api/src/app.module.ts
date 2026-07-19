@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module'
 import { OrdersModule } from './orders/orders.module'
 import { AdminModule } from './admin/admin.module'
 import { PaymentsModule } from './payments/payments.module'
+import { ImagesModule } from './images/images.module'
 import { HealthController } from './health/health.controller'
 import { AboutController } from './about/about.controller'
 import { CatalogController } from './catalog/catalog.controller'
@@ -25,6 +26,7 @@ import { RolesGuard } from './auth/guards/roles.guard'
     OrdersModule,
     AdminModule,
     PaymentsModule,
+    ImagesModule,
   ],
   controllers: [HealthController, AboutController, CatalogController],
   providers: [

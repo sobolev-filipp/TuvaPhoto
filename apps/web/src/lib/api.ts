@@ -84,15 +84,19 @@ async function refreshToken(): Promise<boolean> {
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, skipRefresh = false } = options
 
+  // FormData отправляем как есть: content-type с boundary проставит браузер сам,
+  // JSON.stringify тут ломает загрузку файла.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData
+
   const send = () =>
     fetch(`/api${path}`, {
       method,
       credentials: 'include',
       headers: {
-        ...(body ? { 'content-type': 'application/json' } : {}),
+        ...(body && !isForm ? { 'content-type': 'application/json' } : {}),
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? (isForm ? (body as FormData) : JSON.stringify(body)) : undefined,
     })
 
   let res = await send()
@@ -236,6 +240,22 @@ export const adminApi = {
     api<{ ok: boolean }>(`/admin/categories/${id}`, { method: 'PATCH', body }),
   deleteCategory: (id: string) =>
     api<{ ok: boolean }>(`/admin/categories/${id}`, { method: 'DELETE' }),
+
+  // --- Изображения ---
+  images: () => api<UploadedImageInfo[]>('/admin/images'),
+  uploadImage: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api<UploadedImageInfo>('/admin/images', { method: 'POST', body: form })
+  },
+  deleteImage: (id: string) => api<{ ok: boolean }>(`/admin/images/${id}`, { method: 'DELETE' }),
+}
+
+export interface UploadedImageInfo {
+  id: string
+  url: string
+  width: number
+  height: number
 }
 
 export interface AdminCover {

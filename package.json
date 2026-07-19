@@ -15,8 +15,9 @@
     "db:up": "docker compose up -d --wait",
     "db:stop": "docker compose stop",
     "db:reset": "npm run db:up && npm run db:reset --workspace apps/api",
+    "generate": "npm run prisma:generate --workspace apps/api",
     "seed": "npm run seed --workspace apps/api",
-    "setup": "npm install && npm run db:up && npm run seed",
+    "setup": "npm install && npm run generate && npm run db:up && npm run seed",
     "build": "npm run build --workspace apps/web",
     "lint": "npm run lint --workspace apps/web"
   },
