@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { Public } from '../auth/decorators/public.decorator'
 import { formatPhone, normalizePhone } from '../common/phone'
+import { publicUrl } from '../common/storage'
 
 /**
  * Данные «О фотографе» для публичной части (футер, контакты, кнопки звонка).
@@ -14,7 +15,10 @@ export class AboutController {
 
   @Get()
   async get() {
-    const about = await this.prisma.about.findUnique({ where: { id: 'about' } })
+    const about = await this.prisma.about.findUnique({
+      where: { id: 'about' },
+      include: { photoImage: { select: { path: true } } },
+    })
     if (!about) {
       return {
         fio: '',
@@ -26,6 +30,7 @@ export class AboutController {
         phoneHref: null,
         tg: '',
         vk: '',
+        max: '',
         photoUrl: null,
       }
     }
@@ -44,7 +49,8 @@ export class AboutController {
       // Значки соцсетей на сайте показываются только для заполненных ссылок.
       tg: about.tg,
       vk: about.vk,
-      photoUrl: null,
+      max: about.max,
+      photoUrl: about.photoImage ? publicUrl(about.photoImage.path) : null,
     }
   }
 }

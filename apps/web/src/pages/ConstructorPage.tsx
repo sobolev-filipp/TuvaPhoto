@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  albumById,
-  categories as demoCategories,
-  shootTypes as demoShootTypes,
-} from '@/domain/demoData'
+import { showcaseApi, type PublicAlbumFull } from '@/lib/api'
 import { useAuth } from '@/store/auth'
 import {
   saveConstructorDraft,
@@ -31,16 +27,9 @@ import {
 const MIN_SPREADS = 10
 const MAX_SPREADS = 40
 
-/** Пресеты заполняют параметры по клику на «Применить». Клик по книге пресета
- *  ничего не применяет — только отдельная кнопка (иначе конфликт с листанием). */
-const PRESETS = [
-  { id: 'classic', name: 'Классический', subtitle: 'База', spreads: 16, shootLabels: ['Классическая'], coverLabel: 'Классика' },
-  { id: 'studio', name: 'Студийный', subtitle: 'Свет и характер', spreads: 20, shootLabels: ['Классическая', 'Студийная'], coverLabel: 'Кожа' },
-  { id: 'premium', name: 'Премиум', subtitle: 'Всё включено', spreads: 28, shootLabels: ['Классическая', 'Студийная', 'Репортаж'], coverLabel: 'Тиснение золотом' },
-]
-
-const blankPages = (base: string) =>
-  Array.from({ length: 6 }, (_, i) => ({ id: `${base}-P${i}`, label: `Разворот ${i + 1}`, imageUrl: null }))
+/** Размер книжки-превью «готового варианта» — зависит от ориентации альбома. */
+const presetSize = (orientation: 'LANDSCAPE' | 'PORTRAIT') =>
+  orientation === 'PORTRAIT' ? { pw: 96, ph: 132 } : { pw: 132, ph: 94 }
 
 type PrepayKind = 'percent' | 'full' | 'custom'
 type PayMethod = 'SBP' | 'BANK'
@@ -53,6 +42,11 @@ export function ConstructorPage() {
   const { data: options, isLoading } = useQuery({
     queryKey: ['catalog-options'],
     queryFn: authApi.catalogOptions,
+  })
+  // Альбомы-«готовые варианты» из админки — реальные пресеты конструктора.
+  const { data: presetAlbums } = useQuery({
+    queryKey: ['constructor-albums'],
+    queryFn: showcaseApi.constructorAlbums,
   })
 
   const [category, setCategory] = useState<string | null>(null)
@@ -96,26 +90,30 @@ export function ConstructorPage() {
     setAgreed(draft.agreed)
   }, [])
 
-  // Пришли из каталога с ?album=<id> — подставляем параметры этого альбома.
-  // Демо-альбом сопоставляем с опциями из БД по slug/label (id'ы у них разные).
+  // Пришли из каталога с ?album=<id> — подставляем параметры этого альбома из БД.
   const albumParam = params.get('album')
+  const prefillAlbum = useQuery({
+    queryKey: ['album', albumParam],
+    queryFn: () => showcaseApi.album(albumParam as string),
+    enabled: !!albumParam,
+    retry: false,
+  })
   useEffect(() => {
     if (draftRestored.current || albumPrefilled.current) return
-    if (!albumParam || !options) return
-    const album = albumById(albumParam)
-    if (!album) return
+    const a = prefillAlbum.data
+    if (!a || !options) return
     albumPrefilled.current = true
 
-    const demoCat = demoCategories.find((c) => c.id === album.categoryId)
-    const dbCat = demoCat ? options.categories.find((c) => c.slug === demoCat.slug) : undefined
+    const dbCat = options.categories.find((c) => c.slug === a.categorySlug)
     if (dbCat) setCategory(dbCat.id)
-
-    const labels = album.shootTypeIds
-      .map((id) => demoShootTypes.find((s) => s.id === id)?.label)
-      .filter((l): l is string => !!l)
-    setShoots(options.shootTypes.filter((s) => labels.includes(s.label)).map((s) => s.id))
-    setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, album.spreads)))
-  }, [albumParam, options])
+    // Виды съёмки альбома по названию → id из справочника, оставляя только
+    // допустимые в выбранной категории.
+    const shootIds = options.shootTypes
+      .filter((s) => a.shootTypes.includes(s.label))
+      .map((s) => s.id)
+    setShoots(dbCat ? shootIds.filter((id) => dbCat.shootTypeIds.includes(id)) : shootIds)
+    setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, a.spreadsCount)))
+  }, [prefillAlbum.data, options])
 
   const shootTypes = options?.shootTypes ?? []
   const coverVariants = options?.coverVariants ?? []
@@ -172,13 +170,21 @@ export function ConstructorPage() {
   const customValid =
     prepayKind !== 'custom' || (Number.isFinite(customNum) && customNum >= minDue && customNum <= price.total)
 
-  const applyPreset = (preset: (typeof PRESETS)[number]) => {
-    setShoots(shootTypes.filter((s) => preset.shootLabels.includes(s.label)).map((s) => s.id))
-    // Обложку из пресета ставим, только если она разрешена выбранной категорией.
-    const c = coverVariants.find((cv) => cv.label === preset.coverLabel)
-    setCover(coverAllowed && c && availableCovers.some((av) => av.id === c.id) ? c.id : null)
-    setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, preset.spreads)))
-    setApplied(preset.id)
+  /** Применить готовый вариант (альбом из админки): категория → виды → обложка → развороты. */
+  const applyAlbum = (a: PublicAlbumFull) => {
+    const dbCat = categories.find((c) => c.slug === a.categorySlug) ?? null
+    setCategory(dbCat?.id ?? null)
+    // Виды съёмки альбома по названию, отфильтрованные допустимыми в категории.
+    const shootIds = shootTypes.filter((s) => a.shootTypes.includes(s.label)).map((s) => s.id)
+    setShoots(dbCat ? shootIds.filter((id) => dbCat.shootTypeIds.includes(id)) : shootIds)
+    // Обложку ставим, только если она разрешена и доступна в категории альбома.
+    const coverOk =
+      a.coverVariantId != null &&
+      !!dbCat?.allowCover &&
+      dbCat.coverVariantIds.includes(a.coverVariantId)
+    setCover(coverOk ? a.coverVariantId : null)
+    setSpreads(Math.min(MAX_SPREADS, Math.max(MIN_SPREADS, a.spreadsCount)))
+    setApplied(a.id)
   }
 
   const toggleShoot = (id: string) => {
@@ -268,38 +274,58 @@ export function ConstructorPage() {
         <div className="flex flex-col gap-10 lg:flex-row lg:items-start">
           {/* ЛЕВАЯ КОЛОНКА — шаги */}
           <div className="min-w-0 flex-1">
-            {/* Пресеты */}
-            <section className="mb-11">
-              <div className="mb-1.5 text-[15px] font-bold">Готовые варианты</div>
-              <div className="mb-5 text-[13px] text-white/50">
-                Нажмите «Применить» под книгой — параметры заполнятся, дальше можно менять.
-              </div>
-              <div className="scrollx flex gap-8 overflow-x-auto px-1 pb-5">
-                {PRESETS.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex flex-none flex-col items-center gap-3 rounded-2xl border p-3.5 transition-colors"
-                    style={{
-                      borderColor: applied === p.id ? 'rgba(228,180,92,.5)' : 'rgba(255,255,255,.08)',
-                      background: applied === p.id ? 'rgba(228,180,92,.06)' : 'transparent',
-                    }}
-                  >
-                    <Book title={p.name} subtitle={p.subtitle} pw={130} ph={93} pages={blankPages(p.id)} />
-                    <button
-                      type="button"
-                      onClick={() => applyPreset(p)}
-                      className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
-                        applied === p.id
-                          ? 'bg-gold/15 text-gold'
-                          : 'border border-white/15 text-white/80 hover:border-gold hover:text-gold'
-                      }`}
-                    >
-                      {applied === p.id ? '✓ Применён' : 'Применить настройки'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
+            {/* Готовые варианты — альбомы, отмеченные в админке «в конструктор» */}
+            {presetAlbums && presetAlbums.length > 0 && (
+              <section className="mb-11">
+                <div className="mb-1.5 text-[15px] font-bold">Готовые варианты</div>
+                <div className="mb-5 text-[13px] text-white/50">
+                  Нажмите «Применить» под книгой — параметры заполнятся, дальше можно менять.
+                </div>
+                <div className="scrollx flex gap-8 overflow-x-auto px-1 pb-5">
+                  {presetAlbums.map((a) => {
+                    const size = presetSize(a.orientation)
+                    const pages = a.spreads.map((s, i) => ({
+                      id: `${a.id}-${i}`,
+                      label: s.label,
+                      imageUrl: s.imageUrl,
+                      layout: s.layout,
+                      rightImageUrl: s.rightImageUrl,
+                    }))
+                    return (
+                      <div
+                        key={a.id}
+                        className="flex flex-none flex-col items-center gap-3 rounded-2xl border p-3.5 transition-colors"
+                        style={{
+                          borderColor: applied === a.id ? 'rgba(228,180,92,.5)' : 'rgba(255,255,255,.08)',
+                          background: applied === a.id ? 'rgba(228,180,92,.06)' : 'transparent',
+                        }}
+                      >
+                        <Book
+                          title={a.name}
+                          subtitle={a.subtitle}
+                          pw={size.pw}
+                          ph={size.ph}
+                          pages={pages}
+                          coverUrl={a.coverUrl}
+                          backCoverUrl={a.backCoverUrl}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => applyAlbum(a)}
+                          className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
+                            applied === a.id
+                              ? 'bg-gold/15 text-gold'
+                              : 'border border-white/15 text-white/80 hover:border-gold hover:text-gold'
+                          }`}
+                        >
+                          {applied === a.id ? '✓ Применён' : 'Применить настройки'}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Категория */}
             <section className="mb-10">

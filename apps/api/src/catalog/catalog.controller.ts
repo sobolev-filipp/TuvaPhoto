@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { Public } from '../auth/decorators/public.decorator'
+import { publicUrl } from '../common/storage'
 
 /**
  * Справочники для конструктора: виды съёмки и варианты обложек, которые владелец
@@ -22,7 +23,13 @@ export class CatalogController {
       this.prisma.coverVariant.findMany({
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
-        select: { id: true, label: true, priceMod: true },
+        select: {
+          id: true,
+          label: true,
+          priceMod: true,
+          image: { select: { path: true } },
+          backImage: { select: { path: true } },
+        },
       }),
       this.prisma.category.findMany({
         orderBy: { sortOrder: 'asc' },
@@ -46,8 +53,8 @@ export class CatalogController {
         id: c.id,
         label: c.label,
         priceMod: c.priceMod,
-        // Пока фото обложек не отдаём (нет загрузки) — плейсхолдер на фронте.
-        imageUrl: null as string | null,
+        imageUrl: c.image ? publicUrl(c.image.path) : null,
+        backImageUrl: c.backImage ? publicUrl(c.backImage.path) : null,
       })),
       categories: categories.map((c) => ({
         id: c.id,

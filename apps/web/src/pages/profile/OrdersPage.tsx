@@ -21,6 +21,7 @@ const STATUS_CLASS: Record<OrderStatus, string> = {
 }
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
+const dayFmt = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
 
 function OrderRow({ label, value }: { label: string; value: string }) {
   return (
@@ -63,6 +64,40 @@ function OrderItem({ order }: { order: ApiMyOrder }) {
         >
           Доплатить {formatPrice(order.remaining)}
         </Link>
+      )}
+
+      {/* Готовые демо-альбомы по заказу */}
+      {order.shares.length > 0 && (
+        <div className="mt-4 border-t border-white/[.07] pt-3">
+          <div className="mb-2 text-[13px] font-semibold text-white/60">Готовый альбом</div>
+          <div className="flex flex-col gap-2">
+            {order.shares.map((s, i) => (
+              <div key={i} className="rounded-xl border border-white/[.1] bg-white/[.03] px-3 py-2.5">
+                <div className="text-[14px] font-semibold text-bone">{s.title}</div>
+                {s.expired ? (
+                  <div className="mt-0.5 text-[12px] text-white/40">
+                    Срок просмотра истёк {dayFmt.format(new Date(s.expiresAt))}
+                  </div>
+                ) : (
+                  <Link
+                    to={s.path}
+                    className="mt-1 inline-block text-[13px] font-semibold text-gold hover:underline"
+                  >
+                    Открыть альбом → (до {dayFmt.format(new Date(s.expiresAt))})
+                  </Link>
+                )}
+                {s.diskUrl && (
+                  <div className="mt-1 text-[12px] text-white/50">
+                    <a href={s.diskUrl} target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-gold">
+                      Скачать фото с диска
+                    </a>
+                    {s.downloadUntil && ` · до ${dayFmt.format(new Date(s.downloadUntil))}`}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )

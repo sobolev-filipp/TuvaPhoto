@@ -61,11 +61,6 @@ export class UpsertAlbumDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  spreadsCount!: number
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
   minSpreads!: number
 
   @Type(() => Number)
@@ -88,6 +83,12 @@ export class UpsertAlbumDto {
   @Length(0, 120)
   format?: string
 
+  // Готовая обложка (CoverVariant) — основной способ задать обложку альбома.
+  @IsOptional()
+  @IsString()
+  coverVariantId?: string | null
+
+  // Легаси: прямые картинки обложек (для старых альбомов, фоллбэк).
   @IsOptional()
   @IsString()
   coverImageId?: string | null
@@ -101,6 +102,10 @@ export class UpsertAlbumDto {
 
   @IsBoolean()
   isFeatured!: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  inConstructor?: boolean
 
   @IsOptional()
   @Type(() => Number)

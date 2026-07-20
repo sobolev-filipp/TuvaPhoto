@@ -3,7 +3,11 @@ import { randomBytes } from 'node:crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { OrdersGateway } from '../realtime/orders.gateway'
 import { slugify } from '../common/slug'
+import { publicUrl } from '../common/storage'
 import type { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto'
+import type { CreateShootTypeDto, UpdateShootTypeDto } from './dto/shoot-type.dto'
+import type { CreateCoverDto, UpdateCoverDto } from './dto/cover.dto'
+import type { UpdateAboutDto } from './dto/about.dto'
 
 /** Заказ в том виде, в каком его показывает админка. */
 const orderSelect = {
@@ -147,22 +151,287 @@ export class AdminService {
 
   // ------------------------------------------------------------- Категории
 
-  /** Все обложки — для выбора в редакторе категории. */
-  listCovers() {
-    return this.prisma.coverVariant.findMany({
-      where: { isActive: true },
+  /**
+   * Все обложки, включая выключенные — для управления и для выбора в редакторах
+   * (там активные фильтруются на клиенте). С готовыми url передней/задней картинки
+   * и списком категорий, к которым обложка привязана.
+   */
+  async listCovers() {
+    const covers = await this.prisma.coverVariant.findMany({
       orderBy: { sortOrder: 'asc' },
-      select: { id: true, label: true, priceMod: true },
+      select: {
+        id: true,
+        label: true,
+        priceMod: true,
+        isActive: true,
+        sortOrder: true,
+        imageId: true,
+        backImageId: true,
+        image: { select: { path: true } },
+        backImage: { select: { path: true } },
+        categories: { select: { id: true } },
+      },
+    })
+    return covers.map((c) => ({
+      id: c.id,
+      label: c.label,
+      priceMod: c.priceMod,
+      isActive: c.isActive,
+      sortOrder: c.sortOrder,
+      imageId: c.imageId,
+      backImageId: c.backImageId,
+      imageUrl: c.image ? publicUrl(c.image.path) : null,
+      backImageUrl: c.backImage ? publicUrl(c.backImage.path) : null,
+      categoryIds: c.categories.map((x) => x.id),
+    }))
+  }
+
+  async createCover(dto: CreateCoverDto) {
+    await this.requireImage(dto.imageId)
+    if (dto.backImageId) await this.requireImage(dto.backImageId)
+    const catIds = await this.validCategoryIds(dto.categoryIds ?? [])
+    const last = await this.prisma.coverVariant.aggregate({ _max: { sortOrder: true } })
+    const sortOrder = dto.sortOrder ?? (last._max.sortOrder ?? -1) + 1
+    const created = await this.prisma.coverVariant.create({
+      data: {
+        label: dto.label.trim(),
+        priceMod: dto.priceMod,
+        imageId: dto.imageId,
+        backImageId: dto.backImageId ?? null,
+        isActive: dto.isActive ?? true,
+        sortOrder,
+        categories: { connect: catIds.map((id) => ({ id })) },
+      },
+      select: { id: true },
+    })
+    return { id: created.id }
+  }
+
+  /** Порядок обложек = порядок id в списке. */
+  async reorderCovers(ids: string[]) {
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.coverVariant.update({ where: { id }, data: { sortOrder: i } })),
+    )
+    return { ok: true }
+  }
+
+  async updateCover(id: string, dto: UpdateCoverDto) {
+    const cover = await this.prisma.coverVariant.findUnique({ where: { id }, select: { id: true } })
+    if (!cover) throw new NotFoundException('Обложка не найдена')
+    if (dto.imageId) await this.requireImage(dto.imageId)
+    if (dto.backImageId) await this.requireImage(dto.backImageId)
+
+    let catUpdate: { set: { id: string }[] } | undefined
+    if (dto.categoryIds) {
+      const ids = await this.validCategoryIds(dto.categoryIds)
+      catUpdate = { set: ids.map((cid) => ({ id: cid })) }
+    }
+
+    await this.prisma.coverVariant.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.priceMod !== undefined ? { priceMod: dto.priceMod } : {}),
+        ...(dto.imageId !== undefined ? { imageId: dto.imageId } : {}),
+        // null очищает заднюю обложку.
+        ...(dto.backImageId !== undefined ? { backImageId: dto.backImageId ?? null } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(catUpdate ? { categories: catUpdate } : {}),
+      },
+    })
+    return { ok: true }
+  }
+
+  /**
+   * Удаление обложки. Если она в заказах или альбомах — не удаляем (потеряем
+   * историю/сломаем альбом), предлагаем выключить. Связи с категориями снимаются
+   * каскадом (M2M).
+   */
+  async deleteCover(id: string) {
+    const cover = await this.prisma.coverVariant.findUnique({
+      where: { id },
+      select: { id: true, _count: { select: { orders: true, albums: true } } },
+    })
+    if (!cover) throw new NotFoundException('Обложка не найдена')
+    if (cover._count.orders > 0) {
+      throw new BadRequestException('Обложка есть в заказах — её можно выключить, но не удалить')
+    }
+    if (cover._count.albums > 0) {
+      throw new BadRequestException('Обложка используется в альбомах — сначала уберите её из альбомов')
+    }
+    await this.prisma.coverVariant.delete({ where: { id } })
+    return { ok: true }
+  }
+
+  // --------------------------------------------------------- О фотографе
+
+  /** Данные «О фотографе» для редактора (с id фото и готовым url). */
+  async getAbout() {
+    const about = await this.prisma.about.findUnique({
+      where: { id: 'about' },
+      include: { photoImage: { select: { path: true } } },
+    })
+    if (!about) {
+      return {
+        fio: '',
+        role: '',
+        desc: '',
+        phone: '',
+        email: '',
+        address: '',
+        tg: '',
+        vk: '',
+        max: '',
+        photoImageId: null as string | null,
+        photoUrl: null as string | null,
+      }
+    }
+    return {
+      fio: about.fio,
+      role: about.role,
+      desc: about.desc,
+      phone: about.phone,
+      email: about.email,
+      address: about.address,
+      tg: about.tg,
+      vk: about.vk,
+      max: about.max,
+      photoImageId: about.photoImageId,
+      photoUrl: about.photoImage ? publicUrl(about.photoImage.path) : null,
+    }
+  }
+
+  /** Обновить блок «О фотографе». Синглтон — создаём при первом сохранении. */
+  async updateAbout(dto: UpdateAboutDto) {
+    if (dto.photoImageId) await this.requireImage(dto.photoImageId)
+    const data = {
+      ...(dto.fio !== undefined ? { fio: dto.fio.trim() } : {}),
+      ...(dto.role !== undefined ? { role: dto.role.trim() } : {}),
+      ...(dto.desc !== undefined ? { desc: dto.desc.trim() } : {}),
+      ...(dto.phone !== undefined ? { phone: dto.phone.trim() } : {}),
+      ...(dto.email !== undefined ? { email: dto.email } : {}),
+      ...(dto.address !== undefined ? { address: dto.address.trim() } : {}),
+      ...(dto.tg !== undefined ? { tg: dto.tg.trim() } : {}),
+      ...(dto.vk !== undefined ? { vk: dto.vk.trim() } : {}),
+      ...(dto.max !== undefined ? { max: dto.max.trim() } : {}),
+      // null очищает фото.
+      ...(dto.photoImageId !== undefined ? { photoImageId: dto.photoImageId ?? null } : {}),
+    }
+    await this.prisma.about.upsert({
+      where: { id: 'about' },
+      create: {
+        id: 'about',
+        fio: dto.fio?.trim() ?? '',
+        role: dto.role?.trim() ?? '',
+        desc: dto.desc?.trim() ?? '',
+        phone: dto.phone?.trim() ?? '',
+        email: dto.email ?? '',
+        address: dto.address?.trim() ?? '',
+        tg: dto.tg?.trim() ?? '',
+        vk: dto.vk?.trim() ?? '',
+        max: dto.max?.trim() ?? '',
+        photoImageId: dto.photoImageId ?? null,
+      },
+      update: data,
+    })
+    return { ok: true }
+  }
+
+  private async requireImage(id: string) {
+    const img = await this.prisma.image.findUnique({ where: { id }, select: { id: true } })
+    if (!img) throw new BadRequestException('Изображение не найдено')
+  }
+
+  /** Оставляет только реально существующие категории из переданного списка. */
+  private async validCategoryIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const found = await this.prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    })
+    return found.map((c) => c.id)
+  }
+
+  /**
+   * Все виды съёмки, включая выключенные — для управления в админке и для выбора
+   * в редакторе категории (там активные фильтруются на клиенте). Порядок = порядок
+   * вывода в конструкторе.
+   */
+  listShootTypes() {
+    return this.prisma.shootType.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        label: true,
+        description: true,
+        price: true,
+        isActive: true,
+        sortOrder: true,
+      },
     })
   }
 
-  /** Все виды съёмки — для выбора в редакторе категории. */
-  listShootTypes() {
-    return this.prisma.shootType.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      select: { id: true, label: true, price: true },
+  async createShootType(dto: CreateShootTypeDto) {
+    // Новый вид встаёт в конец (порядком управляет перетаскивание).
+    const last = await this.prisma.shootType.aggregate({ _max: { sortOrder: true } })
+    const sortOrder = dto.sortOrder ?? (last._max.sortOrder ?? -1) + 1
+    const created = await this.prisma.shootType.create({
+      data: {
+        label: dto.label.trim(),
+        description: dto.description?.trim() ?? '',
+        price: dto.price,
+        isActive: dto.isActive ?? true,
+        sortOrder,
+      },
+      select: { id: true },
     })
+    return { id: created.id }
+  }
+
+  /** Порядок видов съёмки = порядок id в списке. */
+  async reorderShootTypes(ids: string[]) {
+    await this.prisma.$transaction(
+      ids.map((id, i) => this.prisma.shootType.update({ where: { id }, data: { sortOrder: i } })),
+    )
+    return { ok: true }
+  }
+
+  async updateShootType(id: string, dto: UpdateShootTypeDto) {
+    const st = await this.prisma.shootType.findUnique({ where: { id }, select: { id: true } })
+    if (!st) throw new NotFoundException('Вид съёмки не найден')
+    await this.prisma.shootType.update({
+      where: { id },
+      data: {
+        ...(dto.label !== undefined ? { label: dto.label.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description.trim() } : {}),
+        ...(dto.price !== undefined ? { price: dto.price } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+      },
+    })
+    return { ok: true }
+  }
+
+  /**
+   * Удаление вида съёмки. Если он уже фигурирует в заказах или альбомах — не
+   * удаляем (иначе потеряем историю/сломаем альбом), предлагаем выключить.
+   * Связи с категориями (M2M) снимаются автоматически каскадом.
+   */
+  async deleteShootType(id: string) {
+    const st = await this.prisma.shootType.findUnique({
+      where: { id },
+      select: { id: true, _count: { select: { orders: true, albums: true } } },
+    })
+    if (!st) throw new NotFoundException('Вид съёмки не найден')
+    if (st._count.orders > 0) {
+      throw new BadRequestException('Вид съёмки есть в заказах — его можно выключить, но не удалить')
+    }
+    if (st._count.albums > 0) {
+      throw new BadRequestException('Вид съёмки используется в альбомах — сначала уберите его из альбомов')
+    }
+    await this.prisma.shootType.delete({ where: { id } })
+    return { ok: true }
   }
 
   /** Категории с их разрешёнными обложками и видами съёмки. */

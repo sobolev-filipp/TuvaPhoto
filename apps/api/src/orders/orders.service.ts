@@ -158,8 +158,20 @@ export class OrdersService {
         category: { select: { name: true } },
         coverVariant: { select: { label: true } },
         shootTypes: { select: { label: true } },
+        // Демо-альбомы (share-ссылки), сделанные владельцем по заказу.
+        shareAlbums: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            token: true,
+            title: true,
+            expiresAt: true,
+            diskUrl: true,
+            downloadUntil: true,
+          },
+        },
       },
     })
+    const now = Date.now()
     return orders.map((o) => ({
       number: o.number,
       status: o.status,
@@ -175,6 +187,15 @@ export class OrdersService {
       category: o.category?.name ?? null,
       cover: o.coverVariant?.label ?? null,
       shootTypes: o.shootTypes.map((s) => s.label),
+      // Готовые демо-альбомы: ссылка на просмотр (пока не истекла) и на диск.
+      shares: o.shareAlbums.map((s) => ({
+        title: s.title,
+        path: `/share/${s.token}`,
+        expiresAt: s.expiresAt,
+        expired: s.expiresAt.getTime() < now,
+        diskUrl: s.diskUrl,
+        downloadUntil: s.downloadUntil,
+      })),
     }))
   }
 }

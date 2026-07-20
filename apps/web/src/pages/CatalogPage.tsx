@@ -1,32 +1,22 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Photo } from '@/components/Photo'
-import { albums, categories as demoCategories, categoryById, shootLabels } from '@/domain/demoData'
-import { authApi } from '@/lib/api'
+import { authApi, showcaseApi } from '@/lib/api'
 import { formatPrice } from '@/domain/pricing'
 
 export function CatalogPage() {
-  // Фильтр живёт в URL: ссылку на категорию можно переслать, и «назад» работает.
+  // Фильтр (slug категории) живёт в URL: ссылку можно переслать, и «назад» работает.
   const [params, setParams] = useSearchParams()
   const active = params.get('cat') ?? 'all'
 
-  // Порядок и названия категорий берём из админки (БД). Альбомы пока демо —
-  // сопоставляем категорию БД с демо по slug, чтобы порядок из админки управлял
-  // каталогом. Когда витрину переведём на БД, фильтр останется тем же.
-  const { data: options } = useQuery({
-    queryKey: ['catalog-options'],
-    queryFn: authApi.catalogOptions,
-  })
-  const orderedCategories = options?.categories
-    ? options.categories.flatMap((db) => {
-        const demo = demoCategories.find((d) => d.slug === db.slug)
-        return demo ? [{ id: demo.id, name: db.name }] : []
-      })
-    : demoCategories
+  // Категории (порядок/названия) и альбомы — из БД.
+  const { data: options } = useQuery({ queryKey: ['catalog-options'], queryFn: authApi.catalogOptions })
+  const { data: albums, isLoading } = useQuery({ queryKey: ['albums'], queryFn: () => showcaseApi.albums() })
 
-  const shown = active === 'all' ? albums : albums.filter((a) => a.categoryId === active)
+  const categories = options?.categories ?? []
+  const tabs = [{ slug: 'all', name: 'Все альбомы' }, ...categories.map((c) => ({ slug: c.slug, name: c.name }))]
 
-  const tabs = [{ id: 'all', name: 'Все альбомы' }, ...orderedCategories]
+  const shown = active === 'all' ? (albums ?? []) : (albums ?? []).filter((a) => a.categorySlug === active)
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1240px] px-4 pt-[70px] pb-[100px] md:px-10">
@@ -43,12 +33,12 @@ export function CatalogPage() {
       <div className="scrollx mb-10 flex gap-2.5 overflow-x-auto pb-1.5">
         {tabs.map((t) => (
           <button
-            key={t.id}
+            key={t.slug}
             type="button"
-            onClick={() => (t.id === 'all' ? setParams({}) : setParams({ cat: t.id }))}
-            aria-pressed={active === t.id}
+            onClick={() => (t.slug === 'all' ? setParams({}) : setParams({ cat: t.slug }))}
+            aria-pressed={active === t.slug}
             className={`flex-none cursor-pointer rounded-full border px-5 py-3 text-[13px] font-semibold whitespace-nowrap transition-colors ${
-              active === t.id
+              active === t.slug
                 ? 'border-gold bg-gold text-on-gold'
                 : 'border-white/[.14] bg-white/[.04] text-white/70 hover:border-gold hover:text-gold'
             }`}
@@ -58,7 +48,9 @@ export function CatalogPage() {
         ))}
       </div>
 
-      {shown.length === 0 ? (
+      {isLoading ? (
+        <p className="text-white/50">Загружаем альбомы…</p>
+      ) : shown.length === 0 ? (
         <p className="text-white/50">В этой категории пока нет альбомов.</p>
       ) : (
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
@@ -70,7 +62,7 @@ export function CatalogPage() {
               <Link to={`/album/${a.id}`} className="relative block h-[230px]">
                 <Photo src={a.coverUrl} alt={`Обложка альбома «${a.name}»`} placeholder={a.name} />
                 <div className="pointer-events-none absolute top-3 left-3 rounded-full bg-[rgba(11,11,14,.75)] px-3 py-1.5 text-[11px] font-semibold tracking-[.04em] text-gold backdrop-blur-[6px]">
-                  {categoryById(a.categoryId)?.name}
+                  {a.categoryName}
                 </div>
               </Link>
               <div className="p-[22px]">
@@ -83,11 +75,11 @@ export function CatalogPage() {
                 <div className="mb-[18px] flex flex-col gap-2">
                   <div className="flex justify-between gap-3 text-[13px]">
                     <span className="text-white/50">Съёмка</span>
-                    <span className="text-right font-semibold">{shootLabels(a.shootTypeIds)}</span>
+                    <span className="text-right font-semibold">{a.shootTypes.join(', ') || '—'}</span>
                   </div>
                   <div className="flex justify-between gap-3 text-[13px]">
                     <span className="text-white/50">Развороты</span>
-                    <span className="font-semibold">{a.spreads}</span>
+                    <span className="font-semibold">{a.spreadsCount}</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-2.5">

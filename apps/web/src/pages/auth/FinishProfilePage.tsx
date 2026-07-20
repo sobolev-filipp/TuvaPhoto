@@ -20,6 +20,7 @@ export function FinishProfilePage() {
   const [fio, setFio] = useState('')
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -29,7 +30,9 @@ export function FinishProfilePage() {
   if (user.mustChangeCredentials) return <Navigate to="/finish-setup" replace />
   if (!user.mustCompleteProfile) return <Navigate to="/profile" replace />
 
-  const canSubmit = fio.trim().length >= 2 && address.trim().length >= 2 && isPhoneComplete(phone)
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const canSubmit =
+    fio.trim().length >= 2 && address.trim().length >= 2 && isPhoneComplete(phone) && emailValid
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +44,7 @@ export function FinishProfilePage() {
         fio: fio.trim(),
         address: address.trim(),
         phone: `+7${phone}`,
+        email: email.trim(),
       })
       setUser(updated)
       navigate('/profile', { replace: true })
@@ -85,6 +89,19 @@ export function FinishProfilePage() {
         <div>
           <div className="mb-2 text-[13px] font-semibold text-white/55">Телефон</div>
           <PhoneField value={phone} onChange={setPhone} required />
+        </div>
+        <div>
+          <div className="mb-2 text-[13px] font-semibold text-white/55">
+            Публичный email <span className="font-normal text-white/40">(для сайта)</span>
+          </div>
+          <Field
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="studio@example.ru"
+            autoComplete="email"
+            required
+          />
         </div>
         <button type="submit" disabled={busy || !canSubmit} className={submitClass}>
           {busy ? 'Сохраняем…' : 'Сохранить и продолжить'}

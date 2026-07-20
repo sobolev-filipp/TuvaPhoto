@@ -6,7 +6,11 @@ import { adminApi, ApiError, type ApiAdminOrder, type OrderStatus } from '@/lib/
 import { connectAdminSocket } from '@/lib/socket'
 import { formatPrice, pluralSpreads } from '@/domain/pricing'
 import { CategoriesTab } from './admin/CategoriesTab'
+import { ShootTypesTab } from './admin/ShootTypesTab'
+import { CoversTab } from './admin/CoversTab'
 import { AlbumsTab } from './admin/AlbumsTab'
+import { ShareTab } from './admin/ShareTab'
+import { AboutTab } from './admin/AboutTab'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: 'Ожидает оплаты',
@@ -432,7 +436,7 @@ function OrdersTab() {
   )
 }
 
-type TabKey = 'orders' | 'categories' | 'albums'
+type TabKey = 'orders' | 'categories' | 'shoot-types' | 'covers' | 'albums' | 'share' | 'about'
 
 export function AdminPage() {
   const qc = useQueryClient()
@@ -460,7 +464,11 @@ export function AdminPage() {
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
     { key: 'orders', label: 'Заказы', badge: unreadCount },
     { key: 'categories', label: 'Категории' },
+    { key: 'shoot-types', label: 'Виды съёмки' },
+    { key: 'covers', label: 'Обложки' },
     { key: 'albums', label: 'Альбомы' },
+    { key: 'share', label: 'Готовые для клиента' },
+    { key: 'about', label: 'О фотографе' },
   ]
 
   return (
@@ -496,7 +504,11 @@ export function AdminPage() {
         <div className="min-w-0 flex-1">
           {tab === 'orders' && <OrdersTab />}
           {tab === 'categories' && <CategoriesTab />}
+          {tab === 'shoot-types' && <ShootTypesTab />}
+          {tab === 'covers' && <CoversTab />}
           {tab === 'albums' && <AlbumsTab />}
+          {tab === 'share' && <ShareTab />}
+          {tab === 'about' && <AboutTab />}
         </div>
       </div>
     </div>

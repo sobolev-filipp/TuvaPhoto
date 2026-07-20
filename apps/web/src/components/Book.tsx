@@ -298,7 +298,20 @@ export function Book({
             }}
           >
             <div className="relative h-full w-full overflow-hidden rounded-[2px] shadow-[inset_0_0_0_1px_rgba(0,0,0,.06)]">
-              <Photo src={page?.imageUrl} alt={page?.label ?? 'Разворот'} placeholder={page?.label} />
+              {page?.layout === 'DOUBLE' ? (
+                // Два фото по одному на страницу.
+                <div className="flex h-full w-full">
+                  <div className="relative h-full w-1/2 overflow-hidden">
+                    <Photo src={page?.imageUrl} alt={page?.label ?? 'Левая страница'} placeholder="Левая страница" />
+                  </div>
+                  <div className="relative h-full w-1/2 overflow-hidden">
+                    <Photo src={page?.rightImageUrl} alt={page?.label ?? 'Правая страница'} placeholder="Правая страница" />
+                  </div>
+                </div>
+              ) : (
+                // Одно фото на весь разворот.
+                <Photo src={page?.imageUrl} alt={page?.label ?? 'Разворот'} placeholder={page?.label} />
+              )}
               {/* Тень корешка по центру разворота */}
               <div
                 className="pointer-events-none absolute inset-y-0 left-1/2 w-[26px] -translate-x-[13px]"

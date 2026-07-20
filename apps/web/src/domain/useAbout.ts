@@ -14,6 +14,7 @@ export interface AboutData {
   phoneHref: string | null
   tg: string
   vk: string
+  max: string
   photoUrl: string | null
 }
 

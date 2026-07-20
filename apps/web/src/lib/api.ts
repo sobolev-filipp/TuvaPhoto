@@ -231,7 +231,23 @@ export const adminApi = {
 
   // --- Категории ↔ обложки/виды съёмки ---
   covers: () => api<AdminCover[]>('/admin/covers'),
+  createCover: (body: AdminCoverInput) =>
+    api<{ id: string }>('/admin/covers', { method: 'POST', body }),
+  reorderCovers: (ids: string[]) =>
+    api<{ ok: boolean }>('/admin/covers/reorder', { method: 'POST', body: { ids } }),
+  updateCover: (id: string, body: Partial<AdminCoverInput>) =>
+    api<{ ok: boolean }>(`/admin/covers/${id}`, { method: 'PATCH', body }),
+  deleteCover: (id: string) =>
+    api<{ ok: boolean }>(`/admin/covers/${id}`, { method: 'DELETE' }),
   shootTypes: () => api<AdminShootType[]>('/admin/shoot-types'),
+  createShootType: (body: AdminShootTypeInput) =>
+    api<{ id: string }>('/admin/shoot-types', { method: 'POST', body }),
+  reorderShootTypes: (ids: string[]) =>
+    api<{ ok: boolean }>('/admin/shoot-types/reorder', { method: 'POST', body: { ids } }),
+  updateShootType: (id: string, body: Partial<AdminShootTypeInput>) =>
+    api<{ ok: boolean }>(`/admin/shoot-types/${id}`, { method: 'PATCH', body }),
+  deleteShootType: (id: string) =>
+    api<{ ok: boolean }>(`/admin/shoot-types/${id}`, { method: 'DELETE' }),
   categories: () => api<AdminCategory[]>('/admin/categories'),
   createCategory: (body: AdminCategoryInput) =>
     api<{ id: string }>('/admin/categories', { method: 'POST', body }),
@@ -258,6 +274,97 @@ export const adminApi = {
   updateAlbum: (id: string, body: AlbumInput) =>
     api<{ ok: boolean }>(`/admin/albums/${id}`, { method: 'PATCH', body }),
   deleteAlbum: (id: string) => api<{ ok: boolean }>(`/admin/albums/${id}`, { method: 'DELETE' }),
+
+  // --- О фотографе ---
+  about: () => api<AdminAbout>('/admin/about'),
+  updateAbout: (body: AdminAboutInput) =>
+    api<{ ok: boolean }>('/admin/about', { method: 'PATCH', body }),
+
+  // --- Демо-альбомы для клиента (share) ---
+  sharePaidOrders: () => api<SharePaidOrder[]>('/admin/share/orders'),
+  shares: () => api<AdminShare[]>('/admin/share'),
+  createShare: (body: CreateShareInput) =>
+    api<{ id: string; token: string; path: string }>('/admin/share', { method: 'POST', body }),
+  deleteShare: (id: string) => api<{ ok: boolean }>(`/admin/share/${id}`, { method: 'DELETE' }),
+}
+
+/** Оплаченный заказ для выбора при создании демо-ссылки. */
+export interface SharePaidOrder {
+  id: string
+  number: number
+  fio: string
+  school: string
+  phone: string
+  email: string | null
+  total: number
+  createdAt: string
+}
+
+/** Демо-ссылка в списке админки. */
+export interface AdminShare {
+  id: string
+  token: string
+  path: string
+  title: string
+  subtitle: string
+  orderNumber: number
+  orderFio: string
+  expiresAt: string
+  expired: boolean
+  contentDeleted: boolean
+  diskUrl: string | null
+  downloadUntil: string | null
+  spreadsCount: number
+  coverUrl: string | null
+  createdAt: string
+}
+
+/** Тело создания демо-ссылки. */
+export interface CreateShareInput {
+  orderId: string
+  title: string
+  subtitle?: string
+  orientation: AlbumOrientation
+  coverImageId?: string | null
+  backCoverImageId?: string | null
+  spreads: {
+    label?: string
+    layout: SpreadLayout
+    imageId?: string | null
+    rightImageId?: string | null
+  }[]
+  expiresAt: string
+  diskUrl?: string | null
+  downloadUntil?: string | null
+}
+
+/** Блок «О фотографе» для редактора в админке. */
+export interface AdminAbout {
+  fio: string
+  role: string
+  desc: string
+  phone: string
+  email: string
+  address: string
+  tg: string
+  vk: string
+  max: string
+  photoImageId: string | null
+  photoUrl: string | null
+}
+
+/** Тело обновления «О фотографе». */
+export interface AdminAboutInput {
+  fio: string
+  role: string
+  desc: string
+  phone: string
+  email: string
+  address: string
+  tg: string
+  vk: string
+  max: string
+  photoImageId?: string | null
 }
 
 export type AlbumOrientation = 'LANDSCAPE' | 'PORTRAIT'
@@ -297,7 +404,9 @@ export interface AdminAlbumFull {
   format: string
   isPublished: boolean
   isFeatured: boolean
+  inConstructor: boolean
   sortOrder: number
+  coverVariantId: string | null
   cover: AlbumImageRef | null
   backCover: AlbumImageRef | null
   spreads: {
@@ -316,16 +425,17 @@ export interface AlbumInput {
   categoryId: string
   shootTypeIds: string[]
   orientation: AlbumOrientation
-  spreadsCount: number
   minSpreads: number
   maxSpreads: number
   perSpread: number
   price: number
   format?: string
+  coverVariantId?: string | null
   coverImageId?: string | null
   backCoverImageId?: string | null
   isPublished: boolean
   isFeatured: boolean
+  inConstructor?: boolean
   sortOrder?: number
   spreads: {
     label?: string
@@ -346,12 +456,40 @@ export interface AdminCover {
   id: string
   label: string
   priceMod: number
+  isActive: boolean
+  sortOrder: number
+  imageId: string | null
+  backImageId: string | null
+  imageUrl: string | null
+  backImageUrl: string | null
+  categoryIds: string[]
+}
+
+/** Тело создания/обновления обложки. */
+export interface AdminCoverInput {
+  label: string
+  priceMod: number
+  imageId: string
+  backImageId?: string | null
+  isActive: boolean
+  categoryIds: string[]
 }
 
 export interface AdminShootType {
   id: string
   label: string
+  description: string
   price: number
+  isActive: boolean
+  sortOrder: number
+}
+
+/** Тело создания/обновления вида съёмки. */
+export interface AdminShootTypeInput {
+  label: string
+  description: string
+  price: number
+  isActive: boolean
 }
 
 export interface AdminCategory {
@@ -371,6 +509,84 @@ export interface AdminCategoryInput {
   shootTypeIds: string[]
 }
 
+/* ------------------------------------------------- публичная витрина альбомов */
+
+export interface PublicAlbumListItem {
+  id: string
+  name: string
+  subtitle: string
+  orientation: 'LANDSCAPE' | 'PORTRAIT'
+  spreadsCount: number
+  price: number
+  format: string
+  categoryName: string
+  categorySlug: string
+  coverUrl: string | null
+  shootTypes: string[]
+}
+
+export interface PublicAlbumFull {
+  id: string
+  name: string
+  subtitle: string
+  desc: string
+  orientation: 'LANDSCAPE' | 'PORTRAIT'
+  spreadsCount: number
+  minSpreads: number
+  maxSpreads: number
+  perSpread: number
+  price: number
+  format: string
+  categoryName: string
+  categorySlug: string
+  shootTypes: string[]
+  coverVariantId: string | null
+  coverUrl: string | null
+  backCoverUrl: string | null
+  spreads: {
+    label: string
+    layout: 'SINGLE' | 'DOUBLE'
+    imageUrl: string | null
+    rightImageUrl: string | null
+  }[]
+}
+
+export const showcaseApi = {
+  albums: (categorySlug?: string) =>
+    api<PublicAlbumListItem[]>(
+      `/albums${categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : ''}`,
+      { skipRefresh: true },
+    ),
+  featured: () => api<PublicAlbumFull[]>('/albums/featured', { skipRefresh: true }),
+  constructorAlbums: () => api<PublicAlbumFull[]>('/albums/constructor', { skipRefresh: true }),
+  album: (id: string) => api<PublicAlbumFull>(`/albums/${id}`, { skipRefresh: true }),
+}
+
+/* ----------------------------------------------- демо-альбомы по ссылке (share) */
+
+/** Демо по ссылке /share/:token. После истечения отдаётся только `expired`. */
+export type PublicShare =
+  | { expired: true; title: string; subtitle: string }
+  | {
+      expired: false
+      title: string
+      subtitle: string
+      orientation: 'LANDSCAPE' | 'PORTRAIT'
+      coverUrl: string | null
+      backCoverUrl: string | null
+      expiresAt: string
+      spreads: {
+        label: string
+        layout: 'SINGLE' | 'DOUBLE'
+        imageUrl: string | null
+        rightImageUrl: string | null
+      }[]
+    }
+
+export const shareApi = {
+  get: (token: string) => api<PublicShare>(`/share/${token}`, { skipRefresh: true }),
+}
+
 /** Заказ в истории личного кабинета. */
 export interface ApiMyOrder {
   number: number
@@ -387,6 +603,15 @@ export interface ApiMyOrder {
   category: string | null
   cover: string | null
   shootTypes: string[]
+  /** Готовые демо-альбомы по заказу: ссылка на просмотр и на диск. */
+  shares: {
+    title: string
+    path: string
+    expiresAt: string
+    expired: boolean
+    diskUrl: string | null
+    downloadUntil: string | null
+  }[]
 }
 
 export const ordersApi = {
@@ -455,7 +680,13 @@ export const authApi = {
   catalogOptions: () =>
     api<{
       shootTypes: { id: string; label: string; description: string; price: number }[]
-      coverVariants: { id: string; label: string; priceMod: number; imageUrl: string | null }[]
+      coverVariants: {
+        id: string
+        label: string
+        priceMod: number
+        imageUrl: string | null
+        backImageUrl: string | null
+      }[]
       categories: {
         id: string
         name: string
@@ -497,7 +728,7 @@ export const authApi = {
   changeCredentials: (body: { currentPassword: string; newEmail: string; newPassword: string }) =>
     api<{ user: ApiUser }>('/auth/change-credentials', { method: 'POST', body }),
 
-  completeProfile: (body: { fio: string; address: string; phone: string }) =>
+  completeProfile: (body: { fio: string; address: string; phone: string; email: string }) =>
     api<{ user: ApiUser }>('/auth/complete-profile', { method: 'POST', body }),
 
   sessions: () => api<ApiSession[]>('/auth/sessions'),

@@ -11,6 +11,7 @@ import { ConstructorPage } from './pages/ConstructorPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { AdminPage } from './pages/AdminPage'
 import { PayPage } from './pages/PayPage'
+import { SharePage } from './pages/SharePage'
 import { TermsPage } from './pages/TermsPage'
 import { SecurityPage } from './pages/profile/SecurityPage'
 import { ConnectionsPage } from './pages/profile/ConnectionsPage'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="install" element={<InstallPage />} />
         <Route path="constructor" element={<ConstructorPage />} />
         <Route path="pay/:token" element={<PayPage />} />
+        <Route path="share/:token" element={<SharePage />} />
         <Route path="terms" element={<TermsPage />} />
         <Route path="privacy" element={<Stub title="Политика обработки персональных данных" />} />
 

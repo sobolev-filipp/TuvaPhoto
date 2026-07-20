@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { adminApi, type AdminAlbumListItem } from '@/lib/api'
+import { adminApi, ApiError, type AdminAlbumListItem } from '@/lib/api'
 import { formatPrice } from '@/domain/pricing'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AlbumEditor } from './AlbumEditor'
 
 const orientationLabel = (o: AdminAlbumListItem['orientation']) =>
@@ -13,10 +14,17 @@ export function AlbumsTab() {
 
   // null — список; 'new' — создание; id — правка.
   const [editing, setEditing] = useState<string | 'new' | null>(null)
+  const [confirming, setConfirming] = useState<AdminAlbumListItem | null>(null)
+  const [delError, setDelError] = useState<string | null>(null)
 
   const del = useMutation({
     mutationFn: (id: string) => adminApi.deleteAlbum(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'albums'] }),
+    onSuccess: () => {
+      setConfirming(null)
+      void qc.invalidateQueries({ queryKey: ['admin', 'albums'] })
+    },
+    onError: (e: unknown) =>
+      setDelError(e instanceof ApiError ? e.message : 'Не удалось удалить альбом'),
   })
 
   if (editing !== null) {
@@ -85,7 +93,8 @@ export function AlbumsTab() {
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm(`Удалить альбом «${a.name}»?`)) del.mutate(a.id)
+                  setDelError(null)
+                  setConfirming(a)
                 }}
                 className="cursor-pointer rounded-lg border border-red-400/30 px-3 py-1.5 text-[13px] font-semibold text-red-300 transition-colors hover:border-red-400/60"
               >
@@ -95,6 +104,17 @@ export function AlbumsTab() {
           </div>
         ))}
       </div>
+
+      {confirming && (
+        <ConfirmDialog
+          title="Удалить альбом"
+          message={`Удалить альбом «${confirming.name}»? Это действие необратимо.`}
+          busy={del.isPending}
+          error={delError}
+          onConfirm={() => del.mutate(confirming.id)}
+          onClose={() => setConfirming(null)}
+        />
+      )}
     </div>
   )
 }

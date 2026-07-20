@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/Modal'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import {
   adminApi,
   ApiError,
@@ -90,7 +91,10 @@ function CategoryEditor({
             Доступные виды съёмки {shootIds.length > 0 && `· выбрано ${shootIds.length}`}
           </div>
           <div className="flex flex-wrap gap-2">
-            {shoots.map((s) => {
+            {/* Выключенные виды не предлагаем, но уже выбранные оставляем видимыми. */}
+            {shoots
+              .filter((s) => s.isActive || shootIds.includes(s.id))
+              .map((s) => {
               const on = shootIds.includes(s.id)
               return (
                 <button
@@ -139,7 +143,9 @@ function CategoryEditor({
               Доступные обложки {coverIds.length > 0 && `· выбрано ${coverIds.length}`}
             </div>
             <div className="flex flex-wrap gap-2">
-              {covers.map((c) => {
+              {covers
+                .filter((c) => c.isActive || coverIds.includes(c.id))
+                .map((c) => {
                 const on = coverIds.includes(c.id)
                 return (
                   <button
@@ -201,9 +207,17 @@ export function CategoriesTab() {
   const dragFrom = useRef<number | null>(null)
   const [dragOver, setDragOver] = useState<number | null>(null)
 
+  const [confirming, setConfirming] = useState<AdminCategory | null>(null)
+  const [delError, setDelError] = useState<string | null>(null)
+
   const del = useMutation({
     mutationFn: (id: string) => adminApi.deleteCategory(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'categories'] }),
+    onSuccess: () => {
+      setConfirming(null)
+      void qc.invalidateQueries({ queryKey: ['admin', 'categories'] })
+    },
+    onError: (e: unknown) =>
+      setDelError(e instanceof ApiError ? e.message : 'Не удалось удалить категорию'),
   })
 
   const reorder = useMutation({
@@ -337,7 +351,8 @@ export function CategoriesTab() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm(`Удалить категорию «${c.name}»?`)) del.mutate(c.id)
+                      setDelError(null)
+                      setConfirming(c)
                     }}
                     className="cursor-pointer rounded-lg border border-red-400/30 px-3 py-1.5 text-[13px] font-semibold text-red-300 transition-colors hover:border-red-400/60"
                   >
@@ -356,6 +371,17 @@ export function CategoriesTab() {
           covers={covers.data ?? []}
           shoots={shoots.data ?? []}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {confirming && (
+        <ConfirmDialog
+          title="Удалить категорию"
+          message={`Удалить категорию «${confirming.name}»? Это действие необратимо.`}
+          busy={del.isPending}
+          error={delError}
+          onConfirm={() => del.mutate(confirming.id)}
+          onClose={() => setConfirming(null)}
         />
       )}
     </div>

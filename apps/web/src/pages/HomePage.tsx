@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Book } from '@/components/Book'
 import { Photo } from '@/components/Photo'
-import { albums, featuredAlbumIds, heroSlides, reviews as demoReviews } from '@/domain/demoData'
+import { useQuery } from '@tanstack/react-query'
+import { heroSlides, reviews as demoReviews } from '@/domain/demoData'
+import { showcaseApi } from '@/lib/api'
 import type { Review } from '@/domain/types'
 import { useAbout } from '@/domain/useAbout'
 import { ReviewModal } from '@/components/ReviewModal'
@@ -101,9 +103,10 @@ export function HomePage() {
   const [modalOpen, setModalOpen] = useState(false)
   const { toast, show } = useToast()
 
-  const featured = featuredAlbumIds
-    .map((id) => albums.find((a) => a.id === id))
-    .filter((a): a is (typeof albums)[number] => Boolean(a))
+  const { data: featured = [] } = useQuery({
+    queryKey: ['albums', 'featured'],
+    queryFn: showcaseApi.featured,
+  })
 
   const addReview = (review: Review) => {
     setReviews((prev) => [review, ...prev])
@@ -144,23 +147,35 @@ export function HomePage() {
             Container query меряет контентную ширину секции. */}
         <div className="@container">
           <div className="flex flex-wrap justify-center gap-14 @min-[976px]:justify-start">
-            {featured.map((b) => (
-              <div key={b.id} className="flex flex-col items-center gap-[18px]">
-                <Book
-                  title={b.name}
-                  subtitle={b.subtitle}
-                  pages={b.pages}
-                  coverUrl={b.coverUrl}
-                  backCoverUrl={b.backCoverUrl}
-                />
-                <Link
-                  to={`/album/${b.id}`}
-                  className="text-[13px] font-semibold tracking-[.04em] text-white/60 hover:text-gold"
-                >
-                  Подробнее об альбоме →
-                </Link>
-              </div>
-            ))}
+            {featured.map((b) => {
+              const size = b.orientation === 'PORTRAIT' ? { pw: 150, ph: 205 } : { pw: 210, ph: 147 }
+              const pages = b.spreads.map((s, i) => ({
+                id: `${b.id}-${i}`,
+                label: s.label,
+                imageUrl: s.imageUrl,
+                layout: s.layout,
+                rightImageUrl: s.rightImageUrl,
+              }))
+              return (
+                <div key={b.id} className="flex flex-col items-center gap-[18px]">
+                  <Book
+                    title={b.name}
+                    subtitle={b.subtitle}
+                    pw={size.pw}
+                    ph={size.ph}
+                    pages={pages}
+                    coverUrl={b.coverUrl}
+                    backCoverUrl={b.backCoverUrl}
+                  />
+                  <Link
+                    to={`/album/${b.id}`}
+                    className="text-[13px] font-semibold tracking-[.04em] text-white/60 hover:text-gold"
+                  >
+                    Подробнее об альбоме →
+                  </Link>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>

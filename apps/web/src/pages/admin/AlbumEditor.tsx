@@ -9,6 +9,7 @@ import {
   type AlbumOrientation,
   type SpreadLayout,
 } from '@/lib/api'
+import { CoverEditor } from './CoverEditor'
 
 const fieldClass =
   'w-full rounded-xl border border-white/[.12] bg-field px-3 py-2.5 text-sm text-bone outline-none transition-colors placeholder:text-white/30 focus:border-gold'
@@ -81,6 +82,9 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
   const options = useQuery({ queryKey: ['catalog-options'], queryFn: authApi.catalogOptions })
   const categories = options.data?.categories ?? []
   const allShootTypes = options.data?.shootTypes ?? []
+  // Обложки (готовые CoverVariant) — для подбора по категории.
+  const coversQuery = useQuery({ queryKey: ['admin', 'covers'], queryFn: adminApi.covers })
+  const allCovers = coversQuery.data ?? []
 
   // Существующий альбом при редактировании.
   const existing = useQuery({
@@ -96,15 +100,15 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
   const [shootIds, setShootIds] = useState<string[]>([])
   const [orientation, setOrientation] = useState<AlbumOrientation>('LANDSCAPE')
   const [format, setFormat] = useState('')
-  const [spreadsCount, setSpreadsCount] = useState('16')
   const [minSpreads, setMinSpreads] = useState('10')
   const [maxSpreads, setMaxSpreads] = useState('40')
   const [perSpread, setPerSpread] = useState('420')
   const [price, setPrice] = useState('15000')
-  const [cover, setCover] = useState<ImageRef | null>(null)
-  const [backCover, setBackCover] = useState<ImageRef | null>(null)
+  const [coverVariantId, setCoverVariantId] = useState<string | null>(null)
+  const [coverEditorOpen, setCoverEditorOpen] = useState(false)
   const [isPublished, setIsPublished] = useState(false)
   const [isFeatured, setIsFeatured] = useState(false)
+  const [inConstructor, setInConstructor] = useState(false)
   const [spreads, setSpreads] = useState<SpreadState[]>([newSpread()])
   const [error, setError] = useState<string | null>(null)
 
@@ -119,15 +123,14 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
     setShootIds(a.shootTypeIds)
     setOrientation(a.orientation)
     setFormat(a.format)
-    setSpreadsCount(String(a.spreadsCount))
     setMinSpreads(String(a.minSpreads))
     setMaxSpreads(String(a.maxSpreads))
     setPerSpread(String(a.perSpread))
     setPrice(String(a.price))
-    setCover(a.cover)
-    setBackCover(a.backCover)
+    setCoverVariantId(a.coverVariantId)
     setIsPublished(a.isPublished)
     setIsFeatured(a.isFeatured)
+    setInConstructor(a.inConstructor)
     setSpreads(
       a.spreads.length
         ? a.spreads.map((s) => ({
@@ -155,11 +158,22 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
   const toggleShoot = (sid: string) =>
     setShootIds((prev) => (prev.includes(sid) ? prev.filter((x) => x !== sid) : [...prev, sid]))
 
-  // Смена категории: убираем выбранные виды съёмки, которых нет в новой категории.
+  // Обложки, доступные для выбранной категории (активные + уже выбранная).
+  const availableCovers = allCovers.filter(
+    (c) => c.categoryIds.includes(categoryId) && (c.isActive || c.id === coverVariantId),
+  )
+  const selectedCover = allCovers.find((c) => c.id === coverVariantId) ?? null
+
+  // Смена категории: убираем виды съёмки и обложку, которых нет в новой категории.
   const chooseCategory = (id: string) => {
     setCategoryId(id)
     const cat = categories.find((c) => c.id === id)
     if (cat) setShootIds((prev) => prev.filter((sid) => cat.shootTypeIds.includes(sid)))
+    setCoverVariantId((prev) => {
+      if (!prev) return prev
+      const cover = allCovers.find((c) => c.id === prev)
+      return cover && cover.categoryIds.includes(id) ? prev : null
+    })
   }
 
   const patchSpread = (key: string, patch: Partial<SpreadState>) =>
@@ -174,16 +188,15 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
         categoryId,
         shootTypeIds: shootIds,
         orientation,
-        spreadsCount: Number(spreadsCount) || 1,
         minSpreads: Number(minSpreads) || 1,
         maxSpreads: Number(maxSpreads) || 1,
         perSpread: Number(perSpread) || 0,
         price: Number(price) || 0,
         format: format.trim(),
-        coverImageId: cover?.id ?? null,
-        backCoverImageId: backCover?.id ?? null,
+        coverVariantId,
         isPublished,
         isFeatured,
+        inConstructor,
         spreads: spreads.map((s) => ({
           label: s.label.trim(),
           layout: s.layout,
@@ -304,7 +317,6 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
 
         {/* Числа */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <NumField label="Разворотов" value={spreadsCount} onChange={setSpreadsCount} />
           <NumField label="Мин. разворотов" value={minSpreads} onChange={setMinSpreads} />
           <NumField label="Макс. разворотов" value={maxSpreads} onChange={setMaxSpreads} />
           <NumField label="Цена за разворот, ₽" value={perSpread} onChange={setPerSpread} />
@@ -315,10 +327,77 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
           </label>
         </div>
 
-        {/* Обложки */}
-        <div className="flex flex-wrap gap-6">
-          <ImageUpload label="Обложка" value={cover} onChange={setCover} />
-          <ImageUpload label="Задняя обложка" value={backCover} onChange={setBackCover} />
+        {/* Обложка — выбор готовой обложки категории или создание новой */}
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold text-white/70">Обложка</span>
+            <button
+              type="button"
+              onClick={() => setCoverEditorOpen(true)}
+              disabled={!categoryId}
+              className="cursor-pointer rounded-full border border-white/15 px-3 py-1.5 text-[13px] font-semibold text-bone transition-colors hover:border-gold/50 hover:text-gold disabled:cursor-default disabled:opacity-40"
+            >
+              + Создать обложку
+            </button>
+          </div>
+
+          {availableCovers.length === 0 ? (
+            <div className="rounded-xl border border-white/[.09] bg-surface-2 px-4 py-4 text-[13px] text-white/45">
+              Для этой категории пока нет обложек. Создайте новую — она привяжется к категории.
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {/* Вариант «без обложки» */}
+              <button
+                type="button"
+                onClick={() => setCoverVariantId(null)}
+                className="flex h-[132px] w-[104px] flex-col items-center justify-center rounded-xl border-2 text-[12px] font-semibold transition-colors"
+                style={{
+                  borderColor: coverVariantId === null ? '#E4B45C' : 'rgba(255,255,255,.12)',
+                  background: coverVariantId === null ? 'rgba(228,180,92,.1)' : 'transparent',
+                  color: coverVariantId === null ? '#E4B45C' : 'rgba(255,255,255,.5)',
+                }}
+              >
+                Без обложки
+              </button>
+
+              {availableCovers.map((c) => {
+                const on = c.id === coverVariantId
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCoverVariantId(c.id)}
+                    className="flex w-[104px] flex-col overflow-hidden rounded-xl border-2 text-left transition-colors"
+                    style={{ borderColor: on ? '#E4B45C' : 'rgba(255,255,255,.12)' }}
+                    title={c.label}
+                  >
+                    <div className="h-[100px] w-full bg-black/20">
+                      {c.imageUrl ? (
+                        <img src={c.imageUrl} alt={c.label} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[11px] text-white/30">
+                          нет фото
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className="truncate px-2 py-1.5 text-[12px] font-semibold"
+                      style={{ color: on ? '#E4B45C' : undefined }}
+                    >
+                      {c.label}
+                      {c.priceMod > 0 && <span className="opacity-60"> +{c.priceMod}₽</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {selectedCover?.backImageUrl && (
+            <div className="mt-2 text-[12px] text-white/45">
+              У обложки задана задняя сторона — она подставится автоматически.
+            </div>
+          )}
         </div>
 
         {/* Развороты */}
@@ -398,6 +477,13 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
           <ToggleButton on={isFeatured} onClick={() => setIsFeatured((v) => !v)}>
             {isFeatured ? '✓ На главной' : 'Показать на главной'}
           </ToggleButton>
+          <ToggleButton on={inConstructor} onClick={() => setInConstructor((v) => !v)}>
+            {inConstructor ? '✓ В конструкторе' : 'Готовый вариант в конструкторе'}
+          </ToggleButton>
+        </div>
+        <div className="-mt-2 text-[12px] text-white/40">
+          «Готовый вариант» показывает альбом в конструкторе как пресет (нужна публикация).
+          Число разворотов считается автоматически по добавленным ниже разворотам.
         </div>
 
         <div className="flex gap-3">
@@ -418,6 +504,16 @@ export function AlbumEditor({ id, onDone }: { id: string | null; onDone: () => v
           </button>
         </div>
       </div>
+
+      {coverEditorOpen && (
+        <CoverEditor
+          initial={null}
+          categories={categories}
+          defaultCategoryId={categoryId}
+          onSaved={(id) => setCoverVariantId(id)}
+          onClose={() => setCoverEditorOpen(false)}
+        />
+      )}
     </div>
   )
 }

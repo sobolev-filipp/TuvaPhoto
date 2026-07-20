@@ -1,23 +1,40 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Book } from '@/components/Book'
-import { albumById, categoryById, shootLabels } from '@/domain/demoData'
+import { showcaseApi } from '@/lib/api'
 import { formatPrice } from '@/domain/pricing'
 import { useAbout } from '@/domain/useAbout'
+
+/** Размеры страницы книги под ориентацию альбома. */
+const bookSize = (orientation: 'LANDSCAPE' | 'PORTRAIT') =>
+  orientation === 'PORTRAIT' ? { pw: 210, ph: 290 } : { pw: 320, ph: 224 }
 
 export function AlbumPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const album = id ? albumById(id) : undefined
   const { data: about } = useAbout()
 
-  // Возврат по истории: вернёт в каталог в тот же раздел и на ту же позицию,
-  // откуда пришли. Фолбэк на /catalog — если на альбом зашли по прямой ссылке.
+  const { data: album, isLoading, isError } = useQuery({
+    queryKey: ['album', id],
+    queryFn: () => showcaseApi.album(id as string),
+    enabled: !!id,
+    retry: false,
+  })
+
+  // Возврат по истории: вернёт в каталог в тот же раздел и на ту же позицию.
   const goBack = () => {
     if (window.history.length > 1) navigate(-1)
     else navigate('/catalog')
   }
 
-  if (!album) {
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-[1240px] px-4 py-[100px] text-white/50 md:px-10">Загружаем альбом…</div>
+    )
+  }
+
+  if (isError || !album) {
     return (
       <div className="mx-auto max-w-[1240px] px-4 py-[100px] text-center md:px-10">
         <h1 className="font-display m-0 mb-4 text-[32px] font-extrabold">Альбом не найден</h1>
@@ -28,6 +45,15 @@ export function AlbumPage() {
       </div>
     )
   }
+
+  const { pw, ph } = bookSize(album.orientation)
+  const pages = album.spreads.map((s, i) => ({
+    id: `${album.id}-${i}`,
+    label: s.label,
+    imageUrl: s.imageUrl,
+    layout: s.layout,
+    rightImageUrl: s.rightImageUrl,
+  }))
 
   return (
     <div className="animate-fade-up mx-auto max-w-[1240px] px-4 pt-10 pb-[100px] md:px-10">
@@ -44,9 +70,9 @@ export function AlbumPage() {
           <Book
             title={album.name}
             subtitle={album.subtitle}
-            pw={320}
-            ph={224}
-            pages={album.pages}
+            pw={pw}
+            ph={ph}
+            pages={pages}
             coverUrl={album.coverUrl}
             backCoverUrl={album.backCoverUrl}
           />
@@ -54,7 +80,7 @@ export function AlbumPage() {
 
         <div className="flex-[1_1_360px]">
           <div className="mb-[18px] inline-block rounded-full bg-gold/[.12] px-3.5 py-1.5 text-xs font-semibold text-gold">
-            {categoryById(album.categoryId)?.name}
+            {album.categoryName}
           </div>
           <h1 className="font-display m-0 mb-[18px] text-[32px] leading-[1.05] font-extrabold md:text-[40px]">
             {album.name}
@@ -64,15 +90,17 @@ export function AlbumPage() {
           <div className="mb-[30px] flex flex-col gap-3.5 border-y border-white/[.09] py-[22px]">
             <div className="flex justify-between gap-4">
               <span className="text-white/50">Вид фотосессии</span>
-              <span className="text-right font-semibold">{shootLabels(album.shootTypeIds)}</span>
+              <span className="text-right font-semibold">{album.shootTypes.join(', ') || '—'}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-white/50">Количество разворотов</span>
-              <span className="font-semibold">{album.spreads}</span>
+              <span className="font-semibold">{album.spreadsCount}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-white/50">Формат</span>
-              <span className="font-semibold">{album.format}</span>
+              <span className="font-semibold">
+                {album.format || (album.orientation === 'PORTRAIT' ? 'Книжная' : 'Альбомная')}
+              </span>
             </div>
           </div>
 

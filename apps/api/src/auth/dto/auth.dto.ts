@@ -107,6 +107,11 @@ export class CompleteProfileDto {
   @Matches(/^\+79\d{9}$/, { message: 'Укажите телефон в формате +7 (9xx) xxx-xx-xx' })
   @Transform(({ value }) => (typeof value === 'string' ? (normalizePhone(value) ?? value) : value))
   phone!: string
+
+  // Публичный email для футера/контактов (отдельный от email-логина аккаунта).
+  @IsEmail({}, { message: 'Укажите корректный email для сайта' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  email!: string
 }
 
 export class ChangeCredentialsDto {

@@ -154,6 +154,106 @@ async function seedCategoryCovers() {
   console.log('✓ Обложки и виды съёмки привязаны к категориям')
 }
 
+/**
+ * Демо-альбомы для витрины (без фото — на сайте покажутся плейсхолдеры).
+ * Заводим только на пустой таблице, чтобы повторный сид не плодил дубли.
+ * Демонстрируют ориентацию и режимы разворота (одно фото / два по страницам).
+ */
+async function seedAlbums() {
+  if ((await prisma.album.count()) > 0) {
+    console.log('· Альбомы уже заведены, пропускаем')
+    return
+  }
+  const cats = Object.fromEntries(
+    (await prisma.category.findMany({ select: { id: true, slug: true } })).map((c) => [c.slug, c.id]),
+  )
+  const shoots = Object.fromEntries(
+    (await prisma.shootType.findMany({ select: { id: true, label: true } })).map((s) => [s.label, s.id]),
+  )
+
+  // Число разворотов в демо-альбоме (spreadsCount выводится из реальных разворотов).
+  const PAGES_PER_ALBUM = 6
+  // Чередуем режимы разворотов, чтобы показать оба варианта вывода.
+  const makeSpreads = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      label: `Разворот ${String(i + 1).padStart(2, '0')}`,
+      layout: (i % 2 === 0 ? 'SINGLE' : 'DOUBLE') as 'SINGLE' | 'DOUBLE',
+      sortOrder: i,
+    }))
+
+  const albums = [
+    {
+      name: 'Первый выпуск',
+      subtitle: 'Альбом детского сада',
+      desc: 'Тёплый альбом про выпуск из детского сада: портреты, игры, утренник. Мягкие цвета и крупные фото.',
+      categorySlug: 'kindergarten',
+      shootLabels: ['Классическая', 'Студийная'],
+      orientation: 'PORTRAIT' as const,
+      minSpreads: 10,
+      maxSpreads: 30,
+      perSpread: 380,
+      price: 12400,
+      format: '21×21 см (квадратная)',
+      isFeatured: true,
+    },
+    {
+      name: 'Начальная школа',
+      subtitle: 'Четыре года вместе',
+      desc: 'Альбом об окончании начальной школы: как менялся класс за четыре года, портреты и репортаж с уроков.',
+      categorySlug: 'primary',
+      shootLabels: ['Классическая', 'Выездная'],
+      orientation: 'LANDSCAPE' as const,
+      minSpreads: 10,
+      maxSpreads: 34,
+      perSpread: 400,
+      price: 14700,
+      format: '21×30 см (альбомная)',
+      isFeatured: true,
+    },
+    {
+      name: 'Выпускной 2026',
+      subtitle: 'Премиальная фотокнига',
+      desc: 'Классический выпускной альбом для 11 класса: портреты каждого ученика, общее фото, кадры с последнего звонка.',
+      categorySlug: 'senior',
+      shootLabels: ['Классическая', 'Репортаж'],
+      orientation: 'LANDSCAPE' as const,
+      minSpreads: 12,
+      maxSpreads: 40,
+      perSpread: 420,
+      price: 18900,
+      format: '21×30 см (альбомная)',
+      isFeatured: true,
+    },
+  ]
+
+  for (let i = 0; i < albums.length; i++) {
+    const a = albums[i]
+    await prisma.album.create({
+      data: {
+        name: a.name,
+        subtitle: a.subtitle,
+        desc: a.desc,
+        categoryId: cats[a.categorySlug],
+        orientation: a.orientation,
+        spreadsCount: PAGES_PER_ALBUM,
+        minSpreads: a.minSpreads,
+        maxSpreads: a.maxSpreads,
+        perSpread: a.perSpread,
+        price: a.price,
+        format: a.format,
+        isPublished: true,
+        isFeatured: a.isFeatured,
+        // Демо-альбомы сразу доступны как «готовые варианты» в конструкторе.
+        inConstructor: true,
+        sortOrder: i,
+        shootTypes: { connect: a.shootLabels.map((l) => ({ id: shoots[l] })) },
+        pages: { create: makeSpreads(6) },
+      },
+    })
+  }
+  console.log(`✓ Демо-альбомы: ${albums.length}`)
+}
+
 async function seedAbout() {
   await prisma.about.upsert({
     where: { id: 'about' },
@@ -172,11 +272,11 @@ async function seedAbout() {
 }
 
 async function main() {
+  // Чистый старт без примеров: только владелец и блок «О фотографе». Категории,
+  // виды съёмки, обложки и альбомы владелец заводит сам в админке. Демо-функции
+  // ниже сохранены (seedCategories/seedShootTypes/seedCoverVariants/
+  // seedCategoryCovers/seedAlbums) — при желании вернуть примеры допишите их вызовы.
   await seedOwner()
-  await seedCategories()
-  await seedShootTypes()
-  await seedCoverVariants()
-  await seedCategoryCovers()
   await seedAbout()
 }
 

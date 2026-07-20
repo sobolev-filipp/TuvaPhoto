@@ -3,6 +3,13 @@ import { AdminService } from './admin.service'
 import { Roles } from '../auth/guards/roles.guard'
 import { CancelOrderDto, SetPaidDto } from './dto/order-actions.dto'
 import { CreateCategoryDto, ReorderCategoriesDto, UpdateCategoryDto } from './dto/category.dto'
+import {
+  CreateShootTypeDto,
+  ReorderShootTypesDto,
+  UpdateShootTypeDto,
+} from './dto/shoot-type.dto'
+import { CreateCoverDto, ReorderCoversDto, UpdateCoverDto } from './dto/cover.dto'
+import { UpdateAboutDto } from './dto/about.dto'
 
 /**
  * Админка владельца. Все ручки строго @Roles('OWNER') — глобальный JwtAuthGuard
@@ -70,9 +77,51 @@ export class AdminController {
     return this.admin.listCovers()
   }
 
+  @Post('covers')
+  createCover(@Body() dto: CreateCoverDto) {
+    return this.admin.createCover(dto)
+  }
+
+  @Post('covers/reorder')
+  @HttpCode(200)
+  reorderCovers(@Body() dto: ReorderCoversDto) {
+    return this.admin.reorderCovers(dto.ids)
+  }
+
+  @Patch('covers/:id')
+  updateCover(@Param('id') id: string, @Body() dto: UpdateCoverDto) {
+    return this.admin.updateCover(id, dto)
+  }
+
+  @Delete('covers/:id')
+  deleteCover(@Param('id') id: string) {
+    return this.admin.deleteCover(id)
+  }
+
   @Get('shoot-types')
   listShootTypes() {
     return this.admin.listShootTypes()
+  }
+
+  @Post('shoot-types')
+  createShootType(@Body() dto: CreateShootTypeDto) {
+    return this.admin.createShootType(dto)
+  }
+
+  @Post('shoot-types/reorder')
+  @HttpCode(200)
+  reorderShootTypes(@Body() dto: ReorderShootTypesDto) {
+    return this.admin.reorderShootTypes(dto.ids)
+  }
+
+  @Patch('shoot-types/:id')
+  updateShootType(@Param('id') id: string, @Body() dto: UpdateShootTypeDto) {
+    return this.admin.updateShootType(id, dto)
+  }
+
+  @Delete('shoot-types/:id')
+  deleteShootType(@Param('id') id: string) {
+    return this.admin.deleteShootType(id)
   }
 
   @Get('categories')
@@ -99,5 +148,17 @@ export class AdminController {
   @Delete('categories/:id')
   deleteCategory(@Param('id') id: string) {
     return this.admin.deleteCategory(id)
+  }
+
+  // ----------------------------------------------------------- О фотографе
+
+  @Get('about')
+  getAbout() {
+    return this.admin.getAbout()
+  }
+
+  @Patch('about')
+  updateAbout(@Body() dto: UpdateAboutDto) {
+    return this.admin.updateAbout(dto)
   }
 }

@@ -246,7 +246,10 @@ export class AuthService {
    * и снимает флаг mustCompleteProfile. Остальные поля About (роль, описание,
    * соцсети) владелец заполнит позже в админке.
    */
-  async completeProfile(userId: string, data: { fio: string; address: string; phone: string }) {
+  async completeProfile(
+    userId: string,
+    data: { fio: string; address: string; phone: string; email: string },
+  ) {
     await this.prisma.about.upsert({
       where: { id: 'about' },
       create: {
@@ -255,10 +258,11 @@ export class AuthService {
         role: 'Фотограф',
         desc: '',
         phone: data.phone,
-        email: '',
+        // Публичный email для футера (не путать с email-логином аккаунта).
+        email: data.email,
         address: data.address,
       },
-      update: { fio: data.fio, address: data.address, phone: data.phone },
+      update: { fio: data.fio, address: data.address, phone: data.phone, email: data.email },
     })
 
     const user = await this.prisma.user.update({

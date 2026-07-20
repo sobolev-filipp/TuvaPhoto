@@ -178,13 +178,18 @@ model Image {
 
   createdAt DateTime @default(now())
 
-  albumCovers     Album[]        @relation("AlbumCover")
-  albumBackCovers Album[]        @relation("AlbumBackCover")
-  spreads         Spread[]       @relation("SpreadImage")
-  spreadsRight    Spread[]       @relation("SpreadRight")
-  coverVariants   CoverVariant[]
-  abouts          About[]
-  heroSlides      HeroSlide[]
+  albumCovers       Album[]        @relation("AlbumCover")
+  albumBackCovers   Album[]        @relation("AlbumBackCover")
+  spreads           Spread[]       @relation("SpreadImage")
+  spreadsRight      Spread[]       @relation("SpreadRight")
+  coverVariants     CoverVariant[] @relation("CoverVariantFront")
+  coverVariantBacks CoverVariant[] @relation("CoverVariantBack")
+  shareCovers       ShareAlbum[]   @relation("ShareCover")
+  shareBackCovers   ShareAlbum[]   @relation("ShareBackCover")
+  shareSpreads      ShareSpread[]  @relation("ShareSpreadImage")
+  shareSpreadRights ShareSpread[]  @relation("ShareSpreadRight")
+  abouts            About[]
+  heroSlides        HeroSlide[]
 }
 
 model Category {
@@ -229,8 +234,12 @@ model CoverVariant {
   label    String
   priceMod Int // надбавка к итогу, рубли
 
+  // Передняя обложка (обязательна на практике) и задняя (необязательна).
   imageId String?
-  image   Image?  @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  image   Image?  @relation("CoverVariantFront", fields: [imageId], references: [id], onDelete: SetNull)
+
+  backImageId String?
+  backImage   Image?  @relation("CoverVariantBack", fields: [backImageId], references: [id], onDelete: SetNull)
 
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
@@ -238,6 +247,9 @@ model CoverVariant {
 
   // Категории, в которых эта обложка доступна для выбора.
   categories Category[]
+
+  // Альбомы, использующие эту обложку (витрина и «готовые» для клиента).
+  albums Album[]
 
   orders Order[]
 }
@@ -269,13 +281,20 @@ model Album {
   backCoverImageId String?
   backCoverImage   Image?  @relation("AlbumBackCover", fields: [backCoverImageId], references: [id], onDelete: SetNull)
 
+  // Готовая обложка (CoverVariant) — предпочтительный источник обложки альбома.
+  // coverImageId/backCoverImageId остаются как легаси-фоллбэк для старых альбомов.
+  coverVariantId String?
+  coverVariant   CoverVariant? @relation(fields: [coverVariantId], references: [id], onDelete: SetNull)
+
   pages Spread[]
 
   // Витрина показывает только опубликованные — админка может готовить альбом,
   // не показывая его клиентам.
   isPublished Boolean @default(false)
   isFeatured  Boolean @default(false)
-  sortOrder   Int     @default(0)
+  // Показывать альбом в конструкторе как «готовый вариант» (применяет параметры).
+  inConstructor Boolean @default(false)
+  sortOrder     Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -342,6 +361,9 @@ model Order {
   coverVariant   CoverVariant? @relation(fields: [coverVariantId], references: [id], onDelete: SetNull)
 
   shootTypes ShootType[]
+
+  // Демо-альбомы (share-ссылки), сделанные владельцем по этому заказу.
+  shareAlbums ShareAlbum[]
 
   spreadsCount Int
   perSpread    Int
@@ -410,8 +432,9 @@ model About {
   email   String
   address String
 
-  tg String @default("")
-  vk String @default("")
+  tg  String @default("")
+  vk  String @default("")
+  max String @default("") // ссылка на профиль в мессенджере MAX
 
   photoImageId String?
   photoImage   Image?  @relation(fields: [photoImageId], references: [id], onDelete: SetNull)
@@ -419,23 +442,64 @@ model About {
   updatedAt DateTime @updatedAt
 }
 
-// Готовый альбом клиента, доступный по секретной ссылке /share/:token.
+// Готовый альбом-демо клиента по секретной ссылке /share/:token. Снимок:
+// обложки/развороты загружаются владельцем и не зависят от каталожных альбомов.
 model ShareAlbum {
   id    String @id @default(cuid())
   token String @unique
 
+  // Привязан к оплаченному заказу — ссылка появляется в истории заказа клиента.
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   title    String
-  subtitle String
+  subtitle String @default("")
 
-  // Ссылка обязана протухать: это личные фото детей.
+  orientation AlbumOrientation @default(LANDSCAPE)
+
+  // Обложки демо (снимок). Удаляются автоджобой по истечении демо.
+  coverImageId String?
+  coverImage   Image?  @relation("ShareCover", fields: [coverImageId], references: [id], onDelete: SetNull)
+
+  backCoverImageId String?
+  backCoverImage   Image?  @relation("ShareBackCover", fields: [backCoverImageId], references: [id], onDelete: SetNull)
+
+  spreads ShareSpread[]
+
+  // Жизнь демо-просмотра: ссылка обязана протухать — это личные фото детей.
   expiresAt DateTime
+  // Момент, когда автоджоба вычистила тяжёлый контент (сама строка/ссылка остаётся).
+  contentDeletedAt DateTime?
 
-  albumId String?
+  // Ссылка на облако с фото и срок скачивания — независимо от жизни демо.
+  diskUrl       String?
+  downloadUntil DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([expiresAt])
+  @@index([orderId])
+}
+
+// Разворот демо-альбома (снимок). Аналог Spread, но для ShareAlbum.
+model ShareSpread {
+  id String @id @default(cuid())
+
+  shareAlbumId String
+  shareAlbum   ShareAlbum @relation(fields: [shareAlbumId], references: [id], onDelete: Cascade)
+
+  label     String       @default("")
+  layout    SpreadLayout @default(SINGLE)
+  sortOrder Int          @default(0)
+
+  imageId String?
+  image   Image?  @relation("ShareSpreadImage", fields: [imageId], references: [id], onDelete: SetNull)
+
+  rightImageId String?
+  rightImage   Image?  @relation("ShareSpreadRight", fields: [rightImageId], references: [id], onDelete: SetNull)
+
+  @@index([shareAlbumId])
 }
 
 // Доказательство согласия по 152-ФЗ: что именно и какую версию текста принял.

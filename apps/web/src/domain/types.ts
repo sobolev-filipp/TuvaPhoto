@@ -28,10 +28,16 @@ export interface CoverVariant {
 }
 
 /** Одна страница книги = один разворот = одно фото на всю ширину. */
+export type SpreadLayout = 'SINGLE' | 'DOUBLE'
+
 export interface Spread {
   id: Id
   label: string
   imageUrl: string | null
+  /** SINGLE — одно фото на разворот; DOUBLE — два фото по страницам. По умолчанию SINGLE. */
+  layout?: SpreadLayout
+  /** Правое фото для режима DOUBLE. */
+  rightImageUrl?: string | null
 }
 
 export interface Album {

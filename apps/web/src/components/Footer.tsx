@@ -8,6 +8,10 @@ const tgIcon = (
 const vkIcon = (
   <path d="M13.16 17.5c-5.47 0-8.86-3.79-9-10.08h2.75c.1 4.62 2.19 6.58 3.79 6.98V7.42h2.62v3.96c1.55-.17 3.18-1.98 3.73-3.96h2.58c-.42 2.44-2.19 4.25-3.44 5 1.25.6 3.27 2.19 4.05 5.08h-2.85c-.6-1.9-2.09-3.37-4.07-3.57v3.57h-.16Z" />
 )
+// MAX — мессенджер: значок-«пузырь диалога».
+const maxIcon = (
+  <path d="M12 3C6.48 3 2 6.58 2 11c0 2.38 1.28 4.51 3.3 5.95-.13 1.2-.6 2.3-1.36 3.2-.15.18-.03.45.2.44 1.68-.08 3.2-.66 4.44-1.6.98.27 2.02.41 3.12.41 5.52 0 10-3.58 10-8s-4.48-8-10-8Z" />
+)
 
 export function Footer() {
   const { data: about } = useAbout()
@@ -16,6 +20,7 @@ export function Footer() {
   const socials = [
     { key: 'tg', href: about?.tg, label: 'Telegram', icon: tgIcon },
     { key: 'vk', href: about?.vk, label: 'ВКонтакте', icon: vkIcon },
+    { key: 'max', href: about?.max, label: 'MAX', icon: maxIcon },
   ].filter((s) => s.href && s.href.trim().length > 0)
 
   const email = about?.email?.trim()
