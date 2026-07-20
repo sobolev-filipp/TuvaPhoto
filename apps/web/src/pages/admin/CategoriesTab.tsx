@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/Modal'
-import { adminApi, ApiError, type AdminCategory, type AdminCover } from '@/lib/api'
+import {
+  adminApi,
+  ApiError,
+  type AdminCategory,
+  type AdminCover,
+  type AdminShootType,
+} from '@/lib/api'
 import { formatPrice } from '@/domain/pricing'
 
 const fieldClass =
@@ -11,16 +17,19 @@ const fieldClass =
 function CategoryEditor({
   initial,
   covers,
+  shoots,
   onClose,
 }: {
   initial: AdminCategory | null
   covers: AdminCover[]
+  shoots: AdminShootType[]
   onClose: () => void
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState(initial?.name ?? '')
   const [allowCover, setAllowCover] = useState(initial?.allowCover ?? false)
   const [coverIds, setCoverIds] = useState<string[]>(initial?.coverVariantIds ?? [])
+  const [shootIds, setShootIds] = useState<string[]>(initial?.shootTypeIds ?? [])
   const [error, setError] = useState<string | null>(null)
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin', 'categories'] })
@@ -34,6 +43,7 @@ function CategoryEditor({
         allowCover,
         // Обложки шлём только когда их выбор разрешён.
         coverVariantIds: allowCover ? coverIds : [],
+        shootTypeIds: shootIds,
       }
       if (initial) await adminApi.updateCategory(initial.id, body)
       else await adminApi.createCategory(body)
@@ -47,6 +57,8 @@ function CategoryEditor({
 
   const toggleCover = (id: string) =>
     setCoverIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const toggleShoot = (id: string) =>
+    setShootIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
   const nameValid = name.trim().length >= 2
 
@@ -71,6 +83,38 @@ function CategoryEditor({
             className={fieldClass}
           />
         </label>
+
+        {/* Виды съёмки, доступные в этой категории. */}
+        <div>
+          <div className="mb-2 text-[13px] font-semibold text-white/70">
+            Доступные виды съёмки {shootIds.length > 0 && `· выбрано ${shootIds.length}`}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {shoots.map((s) => {
+              const on = shootIds.includes(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggleShoot(s.id)}
+                  className="cursor-pointer rounded-full border-2 px-3.5 py-2 text-[13px] font-semibold transition-colors"
+                  style={{
+                    borderColor: on ? '#E4B45C' : 'rgba(255,255,255,.12)',
+                    background: on ? 'rgba(228,180,92,.1)' : 'transparent',
+                    color: on ? '#E4B45C' : undefined,
+                  }}
+                >
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+          {shootIds.length === 0 && (
+            <div className="mt-2 text-[12px] text-white/40">
+              Без выбранных видов съёмки в этой категории нельзя будет собрать альбом.
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
@@ -142,6 +186,7 @@ export function CategoriesTab() {
   const qc = useQueryClient()
   const categories = useQuery({ queryKey: ['admin', 'categories'], queryFn: adminApi.categories })
   const covers = useQuery({ queryKey: ['admin', 'covers'], queryFn: adminApi.covers })
+  const shoots = useQuery({ queryKey: ['admin', 'shoot-types'], queryFn: adminApi.shootTypes })
 
   // null — редактор закрыт; 'new' — создание; объект — правка.
   const [editing, setEditing] = useState<AdminCategory | 'new' | null>(null)
@@ -178,6 +223,10 @@ export function CategoriesTab() {
 
   const coverLabel = (ids: string[]) => {
     const labels = (covers.data ?? []).filter((c) => ids.includes(c.id)).map((c) => c.label)
+    return labels.length ? labels.join(', ') : '—'
+  }
+  const shootLabel = (ids: string[]) => {
+    const labels = (shoots.data ?? []).filter((s) => ids.includes(s.id)).map((s) => s.label)
     return labels.length ? labels.join(', ') : '—'
   }
 
@@ -238,6 +287,10 @@ export function CategoriesTab() {
               <div className="min-w-0 flex-1">
                 <div className="font-display text-[16px] font-bold">{c.name}</div>
                 <div className="mt-2 flex flex-col gap-1 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-white/50">Виды съёмки</span>
+                    <span className="text-right font-medium">{shootLabel(c.shootTypeIds)}</span>
+                  </div>
                   <div className="flex justify-between gap-4">
                     <span className="text-white/50">Выбор обложки</span>
                     <span className="font-medium">{c.allowCover ? 'Разрешён' : 'Нет'}</span>
@@ -301,6 +354,7 @@ export function CategoriesTab() {
         <CategoryEditor
           initial={editing === 'new' ? null : editing}
           covers={covers.data ?? []}
+          shoots={shoots.data ?? []}
           onClose={() => setEditing(null)}
         />
       )}

@@ -31,6 +31,12 @@ export class CreateCategoryDto {
   @ArrayUnique()
   @IsString({ each: true })
   coverVariantIds!: string[]
+
+  // Виды съёмки, доступные в этой категории.
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  shootTypeIds!: string[]
 }
 
 export class ReorderCategoriesDto {
@@ -61,4 +67,10 @@ export class UpdateCategoryDto {
   @ArrayUnique()
   @IsString({ each: true })
   coverVariantIds?: string[]
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  shootTypeIds?: string[]
 }

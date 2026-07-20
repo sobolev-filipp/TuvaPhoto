@@ -6,6 +6,7 @@ import { adminApi, ApiError, type ApiAdminOrder, type OrderStatus } from '@/lib/
 import { connectAdminSocket } from '@/lib/socket'
 import { formatPrice, pluralSpreads } from '@/domain/pricing'
 import { CategoriesTab } from './admin/CategoriesTab'
+import { AlbumsTab } from './admin/AlbumsTab'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: 'Ожидает оплаты',
@@ -431,7 +432,7 @@ function OrdersTab() {
   )
 }
 
-type TabKey = 'orders' | 'categories'
+type TabKey = 'orders' | 'categories' | 'albums'
 
 export function AdminPage() {
   const qc = useQueryClient()
@@ -459,6 +460,7 @@ export function AdminPage() {
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
     { key: 'orders', label: 'Заказы', badge: unreadCount },
     { key: 'categories', label: 'Категории' },
+    { key: 'albums', label: 'Альбомы' },
   ]
 
   return (
@@ -494,6 +496,7 @@ export function AdminPage() {
         <div className="min-w-0 flex-1">
           {tab === 'orders' && <OrdersTab />}
           {tab === 'categories' && <CategoriesTab />}
+          {tab === 'albums' && <AlbumsTab />}
         </div>
       </div>
     </div>

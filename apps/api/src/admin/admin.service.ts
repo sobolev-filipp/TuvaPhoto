@@ -156,7 +156,16 @@ export class AdminService {
     })
   }
 
-  /** Категории с их разрешёнными обложками. */
+  /** Все виды съёмки — для выбора в редакторе категории. */
+  listShootTypes() {
+    return this.prisma.shootType.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, label: true, price: true },
+    })
+  }
+
+  /** Категории с их разрешёнными обложками и видами съёмки. */
   async listCategories() {
     const cats = await this.prisma.category.findMany({
       orderBy: { sortOrder: 'asc' },
@@ -167,6 +176,7 @@ export class AdminService {
         sortOrder: true,
         allowCover: true,
         coverVariants: { select: { id: true } },
+        shootTypes: { select: { id: true } },
       },
     })
     return cats.map((c) => ({
@@ -176,6 +186,7 @@ export class AdminService {
       sortOrder: c.sortOrder,
       allowCover: c.allowCover,
       coverVariantIds: c.coverVariants.map((cv) => cv.id),
+      shootTypeIds: c.shootTypes.map((s) => s.id),
     }))
   }
 
@@ -186,6 +197,7 @@ export class AdminService {
     // Новая категория встаёт в конец списка (порядком управляют перетаскиванием).
     const last = await this.prisma.category.aggregate({ _max: { sortOrder: true } })
     const sortOrder = dto.sortOrder ?? (last._max.sortOrder ?? -1) + 1
+    const shootIds = await this.validShootTypeIds(dto.shootTypeIds)
     const created = await this.prisma.category.create({
       data: {
         name: dto.name.trim(),
@@ -193,6 +205,7 @@ export class AdminService {
         sortOrder,
         allowCover: dto.allowCover,
         coverVariants: { connect: coverIds.map((id) => ({ id })) },
+        shootTypes: { connect: shootIds.map((id) => ({ id })) },
       },
       select: { id: true },
     })
@@ -220,6 +233,12 @@ export class AdminService {
       coversUpdate = { set: ids.map((cid) => ({ id: cid })) }
     }
 
+    let shootsUpdate: { set: { id: string }[] } | undefined
+    if (dto.shootTypeIds) {
+      const ids = await this.validShootTypeIds(dto.shootTypeIds)
+      shootsUpdate = { set: ids.map((sid) => ({ id: sid })) }
+    }
+
     await this.prisma.category.update({
       where: { id },
       data: {
@@ -227,6 +246,7 @@ export class AdminService {
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(dto.allowCover !== undefined ? { allowCover: dto.allowCover } : {}),
         ...(coversUpdate ? { coverVariants: coversUpdate } : {}),
+        ...(shootsUpdate ? { shootTypes: shootsUpdate } : {}),
       },
     })
     return { ok: true }
@@ -254,6 +274,16 @@ export class AdminService {
       select: { id: true },
     })
     return found.map((c) => c.id)
+  }
+
+  /** Оставляет только реально существующие активные виды съёмки. */
+  private async validShootTypeIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const found = await this.prisma.shootType.findMany({
+      where: { id: { in: ids }, isActive: true },
+      select: { id: true },
+    })
+    return found.map((s) => s.id)
   }
 
   /** Уникальный slug из названия: при коллизии добавляем -2, -3, … */

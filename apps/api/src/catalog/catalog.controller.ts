@@ -33,6 +33,8 @@ export class CatalogController {
           allowCover: true,
           // Только активные обложки этой категории.
           coverVariants: { where: { isActive: true }, select: { id: true } },
+          // Только активные виды съёмки этой категории.
+          shootTypes: { where: { isActive: true }, select: { id: true } },
         },
       }),
     ])
@@ -53,6 +55,7 @@ export class CatalogController {
         slug: c.slug,
         allowCover: c.allowCover,
         coverVariantIds: c.coverVariants.map((cv) => cv.id),
+        shootTypeIds: c.shootTypes.map((s) => s.id),
       })),
     }
   }

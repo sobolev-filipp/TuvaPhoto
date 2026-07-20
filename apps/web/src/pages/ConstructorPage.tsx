@@ -129,18 +129,24 @@ export function ConstructorPage() {
     ? coverVariants.filter((c) => selectedCategory.coverVariantIds.includes(c.id))
     : []
 
+  // Виды съёмки тоже зависят от категории.
+  const availableShoots = selectedCategory
+    ? shootTypes.filter((s) => selectedCategory.shootTypeIds.includes(s.id))
+    : []
+
   const selectedShoots = shootTypes.filter((s) => shoots.includes(s.id))
   // Обложку учитываем в цене только когда она реально доступна в выбранной категории.
   const selectedCover =
     coverAllowed && cover ? (availableCovers.find((c) => c.id === cover) ?? null) : null
 
-  // Смена категории: сбрасываем обложку, если она больше не разрешена.
+  // Смена категории: сбрасываем обложку и виды съёмки, недоступные в новой категории.
   const chooseCategory = (id: string) => {
     setApplied(null)
     setCategory((prev) => {
       const next = prev === id ? null : id
       const cat = categories.find((c) => c.id === next)
       if (!cat || !cat.allowCover || !cat.coverVariantIds.includes(cover ?? '')) setCover(null)
+      setShoots((prevShoots) => (cat ? prevShoots.filter((sid) => cat.shootTypeIds.includes(sid)) : []))
       return next
     })
   }
@@ -299,7 +305,7 @@ export function ConstructorPage() {
             <section className="mb-10">
               <div className="mb-1.5 text-[15px] font-bold">1 · Категория</div>
               <div className="mb-4 text-[13px] text-white/50">
-                Ступень, для которой собираем альбом — от неё зависят доступные обложки.
+                Ступень, для которой собираем альбом — от неё зависят виды съёмки и обложки.
               </div>
               <div className="flex flex-wrap gap-2.5">
                 {categories.map((c) => {
@@ -360,10 +366,12 @@ export function ConstructorPage() {
                 {coverAllowed ? '3' : '2'} · Вид фотосессии
               </div>
               <div className="mb-4 text-[13px] text-white/50">
-                Можно выбрать несколько — стоимость суммируется.
+                {selectedCategory
+                  ? 'Можно выбрать несколько — стоимость суммируется.'
+                  : 'Сначала выберите категорию — от неё зависят доступные виды съёмки.'}
               </div>
               <div className="grid gap-3 min-[520px]:grid-cols-2">
-                {shootTypes.map((s) => {
+                {availableShoots.map((s) => {
                   const on = shoots.includes(s.id)
                   return (
                     <button

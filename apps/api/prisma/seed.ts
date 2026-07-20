@@ -102,28 +102,56 @@ async function seedCoverVariants() {
 }
 
 /**
- * Привязка обложек к категориям (детсад/школа/…). Идемпотентно: каждый раз
- * переустанавливаем набор через set. Обложки должны быть засеяны раньше.
+ * Привязка обложек и видов съёмки к категориям (детсад/школа/…). Идемпотентно:
+ * каждый раз переустанавливаем наборы через set. Обложки и виды съёмки должны
+ * быть засеяны раньше.
  */
 async function seedCategoryCovers() {
   const covers = await prisma.coverVariant.findMany({ select: { id: true, label: true } })
-  const byLabel = (labels: string[]) =>
+  const shoots = await prisma.shootType.findMany({ select: { id: true, label: true } })
+  const coversByLabel = (labels: string[]) =>
     covers.filter((c) => labels.includes(c.label)).map((c) => ({ id: c.id }))
+  const shootsByLabel = (labels: string[]) =>
+    shoots.filter((s) => labels.includes(s.label)).map((s) => ({ id: s.id }))
 
-  const config: { slug: string; allowCover: boolean; labels: string[] }[] = [
-    { slug: 'kindergarten', allowCover: true, labels: ['Классика', 'Лён', 'Бархат'] },
-    { slug: 'primary', allowCover: true, labels: ['Классика', 'Кожа', 'Дерево', 'Тиснение золотом'] },
-    // У старшеклассников обложку не выбирают — проверяем и такой путь.
-    { slug: 'senior', allowCover: false, labels: [] },
+  const config: {
+    slug: string
+    allowCover: boolean
+    coverLabels: string[]
+    shootLabels: string[]
+  }[] = [
+    {
+      slug: 'kindergarten',
+      allowCover: true,
+      coverLabels: ['Классика', 'Лён', 'Бархат'],
+      shootLabels: ['Классическая', 'Студийная'],
+    },
+    {
+      slug: 'primary',
+      allowCover: true,
+      coverLabels: ['Классика', 'Кожа', 'Дерево', 'Тиснение золотом'],
+      shootLabels: ['Классическая', 'Выездная', 'Репортаж'],
+    },
+    // У старшеклассников обложку не выбирают, зато доступны все виды съёмки.
+    {
+      slug: 'senior',
+      allowCover: false,
+      coverLabels: [],
+      shootLabels: ['Классическая', 'Студийная', 'Выездная', 'Репортаж'],
+    },
   ]
 
   for (const c of config) {
     await prisma.category.update({
       where: { slug: c.slug },
-      data: { allowCover: c.allowCover, coverVariants: { set: byLabel(c.labels) } },
+      data: {
+        allowCover: c.allowCover,
+        coverVariants: { set: coversByLabel(c.coverLabels) },
+        shootTypes: { set: shootsByLabel(c.shootLabels) },
+      },
     })
   }
-  console.log('✓ Обложки привязаны к категориям')
+  console.log('✓ Обложки и виды съёмки привязаны к категориям')
 }
 
 async function seedAbout() {

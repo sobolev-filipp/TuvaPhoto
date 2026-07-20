@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react'
-import { adminApi, ApiError, type UploadedImageInfo } from '@/lib/api'
+import { adminApi, ApiError } from '@/lib/api'
+
+/** Минимальная ссылка на изображение: id для отправки, url для превью. */
+export type ImageRef = { id: string; url: string }
 
 /**
  * Загрузка одного изображения для админки. Показывает превью загруженного файла,
@@ -11,8 +14,8 @@ export function ImageUpload({
   onChange,
   label,
 }: {
-  value: UploadedImageInfo | null
-  onChange: (img: UploadedImageInfo | null) => void
+  value: ImageRef | null
+  onChange: (img: ImageRef | null) => void
   label?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)

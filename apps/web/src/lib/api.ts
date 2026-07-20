@@ -229,8 +229,9 @@ export const adminApi = {
   refunded: (id: string) =>
     api<{ ok: boolean }>(`/admin/orders/${id}/refunded`, { method: 'POST' }),
 
-  // --- Категории ↔ обложки ---
+  // --- Категории ↔ обложки/виды съёмки ---
   covers: () => api<AdminCover[]>('/admin/covers'),
+  shootTypes: () => api<AdminShootType[]>('/admin/shoot-types'),
   categories: () => api<AdminCategory[]>('/admin/categories'),
   createCategory: (body: AdminCategoryInput) =>
     api<{ id: string }>('/admin/categories', { method: 'POST', body }),
@@ -249,6 +250,89 @@ export const adminApi = {
     return api<UploadedImageInfo>('/admin/images', { method: 'POST', body: form })
   },
   deleteImage: (id: string) => api<{ ok: boolean }>(`/admin/images/${id}`, { method: 'DELETE' }),
+
+  // --- Альбомы ---
+  albums: () => api<AdminAlbumListItem[]>('/admin/albums'),
+  album: (id: string) => api<AdminAlbumFull>(`/admin/albums/${id}`),
+  createAlbum: (body: AlbumInput) => api<{ id: string }>('/admin/albums', { method: 'POST', body }),
+  updateAlbum: (id: string, body: AlbumInput) =>
+    api<{ ok: boolean }>(`/admin/albums/${id}`, { method: 'PATCH', body }),
+  deleteAlbum: (id: string) => api<{ ok: boolean }>(`/admin/albums/${id}`, { method: 'DELETE' }),
+}
+
+export type AlbumOrientation = 'LANDSCAPE' | 'PORTRAIT'
+export type SpreadLayout = 'SINGLE' | 'DOUBLE'
+
+export interface AdminAlbumListItem {
+  id: string
+  name: string
+  orientation: AlbumOrientation
+  price: number
+  isPublished: boolean
+  isFeatured: boolean
+  category: string
+  coverUrl: string | null
+  spreadsCount: number
+}
+
+/** Ссылка на изображение в ответах альбома. */
+export interface AlbumImageRef {
+  id: string
+  url: string
+}
+
+export interface AdminAlbumFull {
+  id: string
+  name: string
+  subtitle: string
+  desc: string
+  categoryId: string
+  shootTypeIds: string[]
+  orientation: AlbumOrientation
+  spreadsCount: number
+  minSpreads: number
+  maxSpreads: number
+  perSpread: number
+  price: number
+  format: string
+  isPublished: boolean
+  isFeatured: boolean
+  sortOrder: number
+  cover: AlbumImageRef | null
+  backCover: AlbumImageRef | null
+  spreads: {
+    label: string
+    layout: SpreadLayout
+    image: AlbumImageRef | null
+    rightImage: AlbumImageRef | null
+  }[]
+}
+
+/** Тело создания/обновления альбома (совпадает с UpsertAlbumDto на бэке). */
+export interface AlbumInput {
+  name: string
+  subtitle?: string
+  desc?: string
+  categoryId: string
+  shootTypeIds: string[]
+  orientation: AlbumOrientation
+  spreadsCount: number
+  minSpreads: number
+  maxSpreads: number
+  perSpread: number
+  price: number
+  format?: string
+  coverImageId?: string | null
+  backCoverImageId?: string | null
+  isPublished: boolean
+  isFeatured: boolean
+  sortOrder?: number
+  spreads: {
+    label?: string
+    layout: SpreadLayout
+    imageId?: string | null
+    rightImageId?: string | null
+  }[]
 }
 
 export interface UploadedImageInfo {
@@ -264,6 +348,12 @@ export interface AdminCover {
   priceMod: number
 }
 
+export interface AdminShootType {
+  id: string
+  label: string
+  price: number
+}
+
 export interface AdminCategory {
   id: string
   name: string
@@ -271,12 +361,14 @@ export interface AdminCategory {
   sortOrder: number
   allowCover: boolean
   coverVariantIds: string[]
+  shootTypeIds: string[]
 }
 
 export interface AdminCategoryInput {
   name: string
   allowCover: boolean
   coverVariantIds: string[]
+  shootTypeIds: string[]
 }
 
 /** Заказ в истории личного кабинета. */
@@ -370,6 +462,7 @@ export const authApi = {
         slug: string
         allowCover: boolean
         coverVariantIds: string[]
+        shootTypeIds: string[]
       }[]
     }>('/catalog/options', { skipRefresh: true }),
 

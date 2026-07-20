@@ -199,6 +199,10 @@ model Category {
   allowCover    Boolean        @default(false)
   coverVariants CoverVariant[]
 
+  // Виды съёмки, доступные в этой категории. В конструкторе и редакторе альбома
+  // список видов зависит от выбранной категории.
+  shootTypes ShootType[]
+
   albums Album[]
   orders Order[]
 }
@@ -212,6 +216,9 @@ model ShootType {
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  // Категории, в которых этот вид съёмки доступен.
+  categories Category[]
 
   albums Album[]
   orders Order[]

@@ -70,6 +70,11 @@ export class AdminController {
     return this.admin.listCovers()
   }
 
+  @Get('shoot-types')
+  listShootTypes() {
+    return this.admin.listShootTypes()
+  }
+
   @Get('categories')
   listCategories() {
     return this.admin.listCategories()
